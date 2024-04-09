@@ -1,0 +1,14 @@
+[package]
+name = "keywhisker"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+keycat = { git = "https://github.com/semilin/keycat", features = ["serde", "opt"] }
+keymeow = { git = "https://github.com/semilin/keymeow" }
+directories = "5.0.1"
+rmp-serde = "1.1.2"
+clap = { version = "4.5.4", features = ["derive"] }
+anyhow = "1.0.81"
