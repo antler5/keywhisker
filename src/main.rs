@@ -5,7 +5,7 @@ use analysis::output_table;
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 use directories::BaseDirs;
-use std::{fs, collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 pub struct Keywhisker {
     pub corpora: HashMap<String, PathBuf>,
@@ -22,14 +22,14 @@ impl Keywhisker {
         })
     }
     fn get_corpus(&self, s: &str) -> Result<keycat::Corpus> {
-	let path = self.corpora.get(s).context("couldn't find corpus")?;
-	let b = fs::read(path).with_context(|| format!("couldn't read corpus file {path:?}"))?;
-	rmp_serde::from_slice(&b).context("couldn't deserialize corpus")
+        let path = self.corpora.get(s).context("couldn't find corpus")?;
+        let b = fs::read(path).with_context(|| format!("couldn't read corpus file {path:?}"))?;
+        rmp_serde::from_slice(&b).context("couldn't deserialize corpus")
     }
     fn get_metrics(&self, s: &str) -> Result<keymeow::MetricData> {
-	let path = self.keyboards.get(s).context("couldn't find keyboard")?;
-	let b = fs::read(path).with_context(|| format!("couldn't read metrics file {path:?}"))?;
-	rmp_serde::from_slice(&b).context("couldn't deserialize metrics")
+        let path = self.keyboards.get(s).context("couldn't find keyboard")?;
+        let b = fs::read(path).with_context(|| format!("couldn't read metrics file {path:?}"))?;
+        rmp_serde::from_slice(&b).context("couldn't deserialize metrics")
     }
 }
 
@@ -84,14 +84,12 @@ fn main() -> Result<()> {
             count,
             metrics,
             analysis_args,
-        }) => {
-            output_table(
-                metrics.to_owned(),
-                keywhisker.get_metrics(&analysis_args.keyboard)?,
-                keywhisker.get_corpus(&analysis_args.corpus)?,
-                *count,
-            )?
-        }
+        }) => output_table(
+            metrics.to_owned(),
+            keywhisker.get_metrics(&analysis_args.keyboard)?,
+            keywhisker.get_corpus(&analysis_args.corpus)?,
+            *count,
+        )?,
         None => {}
     };
     Ok(())
