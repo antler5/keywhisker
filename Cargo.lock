@@ -234,6 +234,7 @@ dependencies = [
  "linya",
  "rand",
  "rmp-serde",
+ "serde_json",
 ]
 
 [[package]]
