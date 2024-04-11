@@ -12,3 +12,5 @@ directories = "5.0.1"
 rmp-serde = "1.1.2"
 clap = { version = "4.5.4", features = ["derive"] }
 anyhow = "1.0.81"
+rand = "0.8.5"
+linya = "0.3.0"
