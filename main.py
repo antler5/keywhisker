@@ -13,4 +13,7 @@ data = pd.read_csv('./data/data.csv')
 # print("train score", regression.score(X_train, y_train))
 # print("test score", regression.score(X_test, y_test))
 
-print(f"mean: {data.sfb.mean()}")
+for (name, vals) in data.items():
+    print(name)
+    print(f"  mean: {vals.mean()}")
+    print(f"  std: {vals.std()}")

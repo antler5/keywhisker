@@ -74,7 +74,9 @@ enum Commands {
     /// Collect metric data into a csv
     Collect {
         /// The total number of layouts to analyze
-        count: usize,
+        count: u64,
+	/// The set of characters to use as keys in the randomized layouts
+        char_set: String,
         /// The list of metrics to collect data for
         metrics: Vec<String>,
         #[command(flatten)]
@@ -101,25 +103,26 @@ fn main() -> Result<()> {
                 "Keyboards: {:?}",
                 keywhisker.keyboards.keys().collect::<Vec<_>>()
             );
-	    println!(
+            println!(
                 "Layouts: {:?}",
                 keywhisker.layouts.keys().collect::<Vec<_>>()
             );
         }
         Some(Commands::Collect {
             count,
+            char_set,
             metrics,
             analysis_args,
         }) => {
             let (corpus, metric_data) = analysis_args.get(&keywhisker)?;
-            output_table(metrics.to_owned(), metric_data, corpus, *count)?
+            output_table(metrics.to_owned(), metric_data, corpus, *count, char_set)?
         }
         Some(Commands::Stats {
             layout,
             analysis_args,
         }) => {
             let (corpus, metric_data) = analysis_args.get(&keywhisker)?;
-            let layout = keywhisker.get_layout(&layout)?;
+            let layout = keywhisker.get_layout(layout)?;
             analysis::stats(metric_data, corpus, layout)?;
         }
         None => {}
