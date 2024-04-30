@@ -75,7 +75,7 @@ enum Commands {
     Collect {
         /// The total number of layouts to analyze
         count: u64,
-	/// The set of characters to use as keys in the randomized layouts
+        /// The set of characters to use as keys in the randomized layouts
         char_set: String,
         /// The list of metrics to collect data for
         metrics: Vec<String>,
@@ -84,6 +84,19 @@ enum Commands {
     },
     Stats {
         layout: String,
+        #[command(flatten)]
+        analysis_args: AnalysisArgs,
+    },
+    Corpus {
+        name: String,
+    },
+    RunGeneration {
+        /// The total number of iterations of swap checks
+        iterations: u64,
+        /// The set of characters to use as keys in the layout
+        char_set: String,
+        /// The metric to reduce
+        metric: String,
         #[command(flatten)]
         analysis_args: AnalysisArgs,
     },
@@ -124,6 +137,21 @@ fn main() -> Result<()> {
             let (corpus, metric_data) = analysis_args.get(&keywhisker)?;
             let layout = keywhisker.get_layout(layout)?;
             analysis::stats(metric_data, corpus, layout)?;
+        }
+        Some(Commands::Corpus { name }) => {
+            let corpus = keywhisker.get_corpus(name)?;
+            println!("{:?}", corpus.trigrams);
+            println!("Size: {:?} bytes", std::mem::size_of_val(&*corpus.trigrams));
+            println!("Length: {:?}", corpus.trigrams.len());
+        }
+        Some(Commands::RunGeneration {
+            iterations,
+            char_set,
+            metric,
+            analysis_args,
+        }) => {
+            let (corpus, metric_data) = analysis_args.get(&keywhisker)?;
+            crate::analysis::output_greedy(metric, metric_data, corpus, char_set, *iterations)?;
         }
         None => {}
     };

@@ -1,42 +1,14 @@
 use anyhow::{Context, Result};
 use keycat::{
-    analysis::{Analyzer, MetricData as KcMetricData},
-    Corpus, Layout, NgramType,
+    analysis::{Analyzer, MetricData as KcMetricData, NstrokeData, NstrokeIndex},
+    Corpus, CorpusChar, Layout, Swap,
 };
 use keymeow::{LayoutData, MetricContext, MetricData};
-use linya::{Bar, Progress};
+use linya::Progress;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use rayon::prelude::*;
-use std::{fs::File, io::Write};
+use std::{fs::File, io::Write, iter, path::Path};
 use std::{fs::OpenOptions, io::LineWriter, sync::Mutex};
-
-pub struct LayoutTotals {
-    chars: u32,
-    bigrams: u32,
-    skipgrams: u32,
-    trigrams: u32,
-}
-
-impl LayoutTotals {
-    pub fn new(l: &Layout, c: &Corpus) -> Self {
-        LayoutTotals {
-            chars: l.total_char_count(&c),
-            bigrams: l.total_bigram_count(&c),
-            skipgrams: l.total_skipgram_count(&c),
-            trigrams: l.total_trigram_count(&c)
-        }
-    }
-    pub fn percentage(&self, freq: f32, kind: NgramType) -> f32 {
-        let denom = match kind {
-            NgramType::Monogram => self.chars,
-            NgramType::Bigram => self.bigrams,
-            NgramType::Skipgram => self.skipgrams,
-            NgramType::Trigram => self.trigrams,
-        } as f32;
-        100. * freq / denom
-    }
-}
 
 pub fn kc_metric_data(metric_data: keymeow::MetricData, position_count: usize) -> KcMetricData {
     KcMetricData::from(
@@ -56,14 +28,43 @@ pub fn get_metric(s: &str, data: &MetricData) -> Result<usize> {
 }
 
 pub fn filter_metrics(md: KcMetricData, metrics: &[usize]) -> KcMetricData {
+    let strokes: Vec<NstrokeData> = md
+        .strokes
+        .into_iter()
+        .filter(|ns| ns.amounts.iter().any(|amt| metrics.contains(&amt.metric)))
+        .collect();
+    let mut position_strokes: Vec<Vec<NstrokeIndex>> = vec![vec![]; md.position_strokes[0].len()];
+    for (i, stroke) in strokes.iter().map(|s| &s.nstroke).enumerate() {
+        for pos in stroke.to_vec() {
+            position_strokes[pos].push(i);
+        }
+    }
     KcMetricData {
-        strokes: md
-            .strokes
-            .into_iter()
-            .filter(|ns| ns.amounts.iter().any(|amt| metrics.contains(&amt.metric)))
-            .collect(),
+        strokes,
+        position_strokes,
         ..md
     }
+}
+
+fn layout_from_charset(corpus: &Corpus, metric_data: &MetricData, char_set: &str) -> Layout {
+    let core_matrix: Vec<CorpusChar> = char_set.chars().map(|c| corpus.corpus_char(c)).collect();
+    let matrix = core_matrix
+        .iter()
+        .chain(
+            iter::repeat(&0usize).take(
+                metric_data
+                    .keyboard
+                    .keys
+                    .map
+                    .iter()
+                    .map(|v| v.len())
+                    .sum::<usize>()
+                    - core_matrix.len(),
+            ),
+        )
+        .copied()
+        .collect();
+    Layout { matrix }
 }
 
 pub fn output_table(
@@ -78,11 +79,9 @@ pub fn output_table(
         .map(|s| get_metric(s, &metric_data))
         .collect();
     let metrics = metrics.context("invalid metric")?;
-    let layout = Layout {
-        matrix: char_set.chars().map(|c| corpus.corpus_char(c)).collect()
-    };
+    let layout = layout_from_charset(&corpus, &metric_data, &char_set);
 
-    let totals = LayoutTotals::new(&layout, &corpus);
+    let totals = layout.totals(&corpus);
 
     let data = filter_metrics(kc_metric_data(metric_data, layout.matrix.len()), &metrics);
     let analyzer = Analyzer::from(data, corpus);
@@ -95,36 +94,111 @@ pub fn output_table(
     }
     writeln!(writer)?;
     let progress = Mutex::new(Progress::new());
-    let bar: Bar = progress.lock().unwrap().bar(count.try_into()?, "Analyzing");
+    let bar = progress.lock().unwrap().bar(count.try_into()?, "Analyzing");
 
     let threads: u64 = 64;
-    (0..threads)
-        .into_par_iter()
-        .try_for_each(|_| -> Result<()> {
-            let mut stats = analyzer.calc_stats(&layout);
-            let mut layout = layout.clone();
-            let mut rng = thread_rng();
-            let file = OpenOptions::new()
-                .create(false)
-                .append(true)
-                .open("data/data.csv")?;
-            let mut writer = LineWriter::new(file);
-            for _ in 0..count / threads {
-                layout.matrix.shuffle(&mut rng);
-                stats.iter_mut().for_each(|x| *x = 0.0);
-                analyzer.recalc_stats(&mut stats, &layout);
-                let mut s = String::new();
-                for m in &metrics {
-                    let percent = totals.percentage(stats[*m].into(), analyzer.data.metrics[*m]);
-                    s.push_str(&percent.to_string());
-                    s.push(',');
+    std::thread::scope(|s| {
+        for _ in 0..threads {
+            s.spawn(|| {
+                let count = &count.clone();
+                let mut stats = analyzer.calc_stats(&layout);
+                let mut layout = layout.clone();
+                let mut rng = thread_rng();
+                let file = OpenOptions::new()
+                    .create(false)
+                    .append(true)
+                    .open("data/data.csv")
+                    .unwrap();
+                let mut writer = LineWriter::new(file);
+                for _ in 0..count / threads {
+                    layout.matrix.shuffle(&mut rng);
+                    stats.iter_mut().for_each(|x| *x = 0.0);
+                    analyzer.recalc_stats(&mut stats, &layout);
+                    let mut s = String::new();
+                    for m in &metrics {
+                        let percent =
+                            totals.percentage(stats[*m].into(), analyzer.data.metrics[*m]);
+                        s.push_str(&percent.to_string());
+                        s.push(',');
+                    }
+                    s.push('\n');
+                    writer.write_all(&s.into_bytes()).unwrap();
+                    progress.lock().unwrap().inc_and_draw(&bar, 1);
                 }
-                s.push('\n');
-                writer.write_all(&s.into_bytes())?;
-                progress.lock().unwrap().inc_and_draw(&bar, 1);
+            });
+        }
+    });
+
+    Ok(())
+}
+
+pub fn output_greedy(
+    metric: &str,
+    metric_data: keymeow::MetricData,
+    corpus: Corpus,
+    char_set: &str,
+    iterations: u64,
+) -> Result<()> {
+    let metric: usize = get_metric(&metric, &metric_data).context("invalid metric")?;
+    let mut layout = layout_from_charset(&corpus, &metric_data, &char_set);
+
+    let totals = layout.totals(&corpus);
+
+    let data = filter_metrics(
+        kc_metric_data(metric_data, layout.matrix.len()),
+        &vec![metric],
+    );
+    let analyzer = Analyzer::from(data, corpus);
+
+    let possible_swaps: Vec<Swap> = (0..layout.matrix.len())
+        .flat_map(|a| (0..layout.matrix.len()).map(move |b| Swap::new(a, b)))
+        .filter(|Swap { a, b }| a != b)
+        .collect();
+
+    let mut rng = thread_rng();
+
+    for n in 0..10_000_000 {
+        if n % 1000 == 0 {
+            println!("{n}");
+        }
+        let file = File::create(Path::new("data").join(format!("{}.csv", n)))
+            .context("couldn't create data file")?;
+        let mut writer = LineWriter::new(file);
+        writeln!(writer, "iteration,amount")?;
+
+        layout.matrix.shuffle(&mut rng);
+        let mut stats = analyzer.calc_stats(&layout);
+        let mut diff = vec![0.0; stats.len()];
+
+        for i in 0..iterations {
+            let swap: &Swap = possible_swaps
+                .choose(&mut rng)
+                .expect("possible_swaps should not be empty");
+            diff.iter_mut().for_each(|x| *x = 0.0);
+            analyzer.swap_diff(&mut diff, &layout, swap);
+            if diff[metric] < 0.0 {
+                layout.swap(swap);
+                stats[metric] += diff[metric];
+                let percent =
+                    totals.percentage(stats[metric].into(), analyzer.data.metrics[metric]);
+                writeln!(writer, "{i}, {percent:.2}")?;
             }
-            Ok(())
-        })?;
+        }
+    }
+
+    // let output: Vec<_> = layout.matrix.iter().map(|i| analyzer.corpus.uncorpus_unigram(*i)).collect();
+    // for row in 0..3 {
+    // 	for col in 0..5 {
+    // 	    print!("{} ", output[col*3 + row]);
+    // 	}
+    // 	print!(" ");
+    // 	for col in 5..10 {
+    // 	    print!("{} ", output[col*3 + row]);
+    // 	}
+    // 	println!();
+    // }
+
+    // println!("{:?}", totals.percentage(analyzer.calc_stats(&layout)[metric].into(), analyzer.data.metrics[metric]));
 
     Ok(())
 }
@@ -132,7 +206,7 @@ pub fn output_table(
 pub fn stats(metric_data: MetricData, corpus: Corpus, layout: LayoutData) -> Result<()> {
     let ctx = MetricContext::new(&layout, metric_data, corpus)
         .context("could not produce metric context")?;
-    let totals = LayoutTotals::new(&ctx.layout, &ctx.analyzer.corpus);
+    let totals = ctx.layout.totals(&ctx.analyzer.corpus);
 
     let stats = ctx.analyzer.calc_stats(&ctx.layout);
     for (i, stat) in stats.iter().enumerate() {
