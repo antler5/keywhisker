@@ -1,14 +1,11 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
-finals = []
-times = []
-for i in range(0, 500000):
-    data = pd.read_csv(f'./data/{i}.csv')
-    finals.append(data.amount.iloc[-1])
-    times.append(data.iteration.iloc[-1])
-    # plt.plot(datas[i].iteration, datas[i].amount)
+greedy_naive = pd.read_csv(f'data/greedy_runs.csv')
+greedy_neighbor = pd.read_csv(f'data/greedy_neighbor_runs.csv')
 
 fig, ax = plt.subplots(tight_layout=True)
-hist = ax.hist2d(times, finals, bins=40)
+hist = ax.hist(greedy_naive.amount, bins=32)
+hist2 = ax.hist(greedy_neighbor.amount, bins=32)
 plt.show()

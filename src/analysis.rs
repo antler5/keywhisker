@@ -157,33 +157,42 @@ pub fn output_greedy(
 
     let mut rng = thread_rng();
 
-    for n in 0..10_000_000 {
+    let file = File::create(Path::new("data").join("greedy_neighbor_runs.csv"))
+        .context("couldn't create data file")?;
+    let mut writer = LineWriter::new(file);
+    writeln!(writer, "iteration,amount")?;
+
+    for n in 0..100_000 {
         if n % 1000 == 0 {
             println!("{n}");
         }
-        let file = File::create(Path::new("data").join(format!("{}.csv", n)))
-            .context("couldn't create data file")?;
-        let mut writer = LineWriter::new(file);
-        writeln!(writer, "iteration,amount")?;
-
+        
         layout.matrix.shuffle(&mut rng);
-        let mut stats = analyzer.calc_stats(&layout);
+        let stats = analyzer.calc_stats(&layout);
         let mut diff = vec![0.0; stats.len()];
 
-        for i in 0..iterations {
-            let swap: &Swap = possible_swaps
-                .choose(&mut rng)
-                .expect("possible_swaps should not be empty");
-            diff.iter_mut().for_each(|x| *x = 0.0);
-            analyzer.swap_diff(&mut diff, &layout, swap);
-            if diff[metric] < 0.0 {
-                layout.swap(swap);
-                stats[metric] += diff[metric];
-                let percent =
-                    totals.percentage(stats[metric].into(), analyzer.data.metrics[metric]);
-                writeln!(writer, "{i}, {percent:.2}")?;
-            }
-        }
+	let mut i = 0;
+	loop {
+	    let mut best_diff = 0.0;
+	    let mut best_swap = &possible_swaps[0];
+	    for swap in &possible_swaps {
+		diff.iter_mut().for_each(|x| *x = 0.0);
+		analyzer.swap_diff(&mut diff, &layout, swap);
+		if diff[metric] < best_diff {
+                    best_swap = swap;
+		    best_diff = diff[metric];
+                }	
+	    }
+	    if best_diff < 0.0 {
+		layout.swap(best_swap);
+		i += 1;
+	    } else {
+		break;
+	    }
+        };
+	let percent =
+            totals.percentage(analyzer.calc_stats(&layout)[metric].into(), analyzer.data.metrics[metric]);
+	writeln!(writer, "{i}, {percent:.2}")?;
     }
 
     // let output: Vec<_> = layout.matrix.iter().map(|i| analyzer.corpus.uncorpus_unigram(*i)).collect();
