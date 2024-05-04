@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use keycat::{
     analysis::{Analyzer, MetricData as KcMetricData, NstrokeData, NstrokeIndex},
+    layout::LayoutTotals,
     Corpus, CorpusChar, Layout, Swap,
 };
 use keymeow::{LayoutData, MetricContext, MetricData};
 use linya::Progress;
-use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::prelude::*;
 use std::{fs::File, io::Write, iter, path::Path};
 use std::{fs::OpenOptions, io::LineWriter, sync::Mutex};
 
@@ -132,15 +132,130 @@ pub fn output_table(
     Ok(())
 }
 
-pub fn output_greedy(
+struct OptimizationContext {
+    layout: Layout,
+    analyzer: Analyzer,
+    totals: LayoutTotals,
+    possible_swaps: Vec<Swap>,
+    metric: usize,
+}
+
+fn greedy_neighbor_optimization(
+    OptimizationContext {
+        layout,
+        analyzer,
+        totals,
+        possible_swaps,
+        metric,
+    }: &OptimizationContext,
+) -> (u32, f32, Layout) {
+    let mut rng = thread_rng();
+    let mut layout = layout.clone();
+    layout.matrix.shuffle(&mut rng);
+    let stats = analyzer.calc_stats(&layout);
+    let mut diff = vec![0.0; stats.len()];
+
+    let mut i = 0;
+    loop {
+        let mut best_diff = 0.0;
+        let mut best_swap = &possible_swaps[0];
+        for swap in possible_swaps {
+            diff.iter_mut().for_each(|x| *x = 0.0);
+            analyzer.swap_diff(&mut diff, &layout, swap);
+            if diff[*metric] > best_diff {
+                best_swap = swap;
+                best_diff = diff[*metric];
+            }
+        }
+        if best_diff > 0.0 {
+            layout.swap(best_swap);
+            i += 1;
+        } else {
+            break;
+        }
+    }
+    let percent = totals.percentage(
+        analyzer.calc_stats(&layout)[*metric].into(),
+        analyzer.data.metrics[*metric],
+    );
+    (i, percent, layout)
+}
+
+fn greedy_naive_optimization(
+    OptimizationContext {
+        layout,
+        analyzer,
+        totals,
+        possible_swaps,
+        metric,
+    }: &OptimizationContext,
+) -> (u32, f32) {
+    let mut rng = thread_rng();
+    let mut layout = layout.clone();
+    layout.matrix.shuffle(&mut rng);
+    let stats = analyzer.calc_stats(&layout);
+    let mut diff = vec![0.0; stats.len()];
+
+    let mut swap_i = 0;
+    for i in 0..5000 {
+	let swap = possible_swaps.choose(&mut rng).unwrap();
+        diff.iter_mut().for_each(|x| *x = 0.0);
+        analyzer.swap_diff(&mut diff, &layout, swap);
+        if diff[*metric] < 0.0 {
+	    layout.swap(swap);
+	    swap_i = i;
+        }
+        
+    }
+    let percent = totals.percentage(
+        analyzer.calc_stats(&layout)[*metric].into(),
+        analyzer.data.metrics[*metric],
+    );
+    (swap_i, percent)
+}
+
+fn simulated_annealing(
+    OptimizationContext {
+        layout,
+        analyzer,
+        totals,
+        possible_swaps,
+        metric,
+    }: &OptimizationContext,
+) -> (u32, f32, Layout) {
+    let mut rng = thread_rng();
+    let mut layout = layout.clone();
+    layout.matrix.shuffle(&mut rng);
+    let stats = analyzer.calc_stats(&layout);
+    let mut diff = vec![0.0; stats.len()];
+
+    let mut temp = 0.5;
+    let iterations = 20_000;
+    let dec: f32 = temp / iterations as f32;
+    for _ in 0..iterations {
+	temp -= dec;
+	let swap = possible_swaps.choose(&mut rng).unwrap();
+        diff.iter_mut().for_each(|x| *x = 0.0);
+        analyzer.swap_diff(&mut diff, &layout, swap);
+        if diff[*metric] < 0.0 || rng.gen::<f32>() < temp {
+	    layout.swap(swap);
+        }
+    }
+    let percent = totals.percentage(
+        analyzer.calc_stats(&layout)[*metric].into(),
+        analyzer.data.metrics[*metric],
+    );
+    (iterations, percent, layout)
+}
+
+pub fn output_generation(
     metric: &str,
     metric_data: keymeow::MetricData,
     corpus: Corpus,
     char_set: &str,
-    iterations: u64,
 ) -> Result<()> {
     let metric: usize = get_metric(&metric, &metric_data).context("invalid metric")?;
-    let mut layout = layout_from_charset(&corpus, &metric_data, &char_set);
+    let layout = layout_from_charset(&corpus, &metric_data, &char_set);
 
     let totals = layout.totals(&corpus);
 
@@ -155,57 +270,33 @@ pub fn output_greedy(
         .filter(|Swap { a, b }| a != b)
         .collect();
 
-    let mut rng = thread_rng();
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .append(true)
+        .open("data/e200_inroll_greedy_deterministic_runs.tsv").context("couldn't open data file")?;
 
-    let file = File::create(Path::new("data").join("greedy_neighbor_runs.csv"))
-        .context("couldn't create data file")?;
     let mut writer = LineWriter::new(file);
-    writeln!(writer, "iteration,amount")?;
+    writeln!(writer, "iteration\tamount\tlayout")?;
 
-    for n in 0..100_000 {
-        if n % 1000 == 0 {
+    let context = OptimizationContext {
+        layout,
+        analyzer,
+        totals,
+        possible_swaps,
+        metric,
+    };
+
+    for n in 0..4_000 {
+        if n % 100 == 0 {
             println!("{n}");
         }
-        
-        layout.matrix.shuffle(&mut rng);
-        let stats = analyzer.calc_stats(&layout);
-        let mut diff = vec![0.0; stats.len()];
+        let (i, percent, result) = greedy_neighbor_optimization(&context);
+	let chars: String = result.matrix.iter().map(|c| context.analyzer.corpus.uncorpus_unigram(*c)).collect();
 
-	let mut i = 0;
-	loop {
-	    let mut best_diff = 0.0;
-	    let mut best_swap = &possible_swaps[0];
-	    for swap in &possible_swaps {
-		diff.iter_mut().for_each(|x| *x = 0.0);
-		analyzer.swap_diff(&mut diff, &layout, swap);
-		if diff[metric] < best_diff {
-                    best_swap = swap;
-		    best_diff = diff[metric];
-                }	
-	    }
-	    if best_diff < 0.0 {
-		layout.swap(best_swap);
-		i += 1;
-	    } else {
-		break;
-	    }
-        };
-	let percent =
-            totals.percentage(analyzer.calc_stats(&layout)[metric].into(), analyzer.data.metrics[metric]);
-	writeln!(writer, "{i}, {percent:.2}")?;
+        writeln!(writer, "{i}\t{percent}\t{chars}")?;
     }
-
-    // let output: Vec<_> = layout.matrix.iter().map(|i| analyzer.corpus.uncorpus_unigram(*i)).collect();
-    // for row in 0..3 {
-    // 	for col in 0..5 {
-    // 	    print!("{} ", output[col*3 + row]);
-    // 	}
-    // 	print!(" ");
-    // 	for col in 5..10 {
-    // 	    print!("{} ", output[col*3 + row]);
-    // 	}
-    // 	println!();
-    // }
 
     // println!("{:?}", totals.percentage(analyzer.calc_stats(&layout)[metric].into(), analyzer.data.metrics[metric]));
 
