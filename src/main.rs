@@ -41,6 +41,19 @@ impl Keywhisker {
     }
 }
 
+pub fn print_matrix(letters: &[char]) {
+    for row in 0..3 {
+	for col in 0..5 {
+	    print!("{} ", letters[col*3 + row]);
+	}
+	print!(" ");
+	for col in 5..10 {
+	    print!("{} ", letters[col*3 + row]);
+	}
+	println!();
+    }
+}
+
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 pub struct Cli {
@@ -91,8 +104,6 @@ enum Commands {
         name: String,
     },
     RunGeneration {
-        /// The total number of iterations of swap checks
-        iterations: u64,
         /// The set of characters to use as keys in the layout
         char_set: String,
         /// The metric to reduce
@@ -100,6 +111,9 @@ enum Commands {
         #[command(flatten)]
         analysis_args: AnalysisArgs,
     },
+    FormatLayout {
+        chars: String
+    }
 }
 
 fn main() -> Result<()> {
@@ -145,13 +159,17 @@ fn main() -> Result<()> {
             println!("Length: {:?}", corpus.trigrams.len());
         }
         Some(Commands::RunGeneration {
-            iterations,
             char_set,
             metric,
             analysis_args,
         }) => {
             let (corpus, metric_data) = analysis_args.get(&keywhisker)?;
-            crate::analysis::output_greedy(metric, metric_data, corpus, char_set, *iterations)?;
+            crate::analysis::output_generation(metric, metric_data, corpus, char_set)?;
+        }
+        Some(Commands::FormatLayout {
+            chars
+        }) => {
+            print_matrix(chars.chars().collect::<Vec<_>>().as_ref());
         }
         None => {}
     };
