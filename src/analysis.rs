@@ -51,19 +51,11 @@ fn layout_from_charset(corpus: &Corpus, metric_data: &MetricData, char_set: &str
     let core_matrix: Vec<CorpusChar> = char_set.chars().map(|c| corpus.corpus_char(c)).collect();
     let matrix = core_matrix
         .iter()
-        .chain(
-            iter::repeat(&0usize).take(
-                metric_data
-                    .keyboard
-                    .keys
-                    .map
-                    .iter()
-                    .flatten()
-                    .count()
-                    + metric_data.keyboard.combos.len()
-                    - core_matrix.len(),
-            ),
-        )
+        .chain(iter::repeat(&0usize).take(
+            metric_data.keyboard.keys.map.iter().flatten().count()
+                + metric_data.keyboard.combos.len()
+                - core_matrix.len(),
+        ))
         .copied()
         .collect();
     Layout { matrix }
@@ -295,9 +287,9 @@ pub fn output_generation(
             .iter()
             .map(|c| context.analyzer.corpus.uncorpus_unigram(*c))
             .map(|c| match c {
-		'\0' => ' ',
-		c => c
-	    })
+                '\0' => ' ',
+                c => c,
+            })
             .collect();
 
         writeln!(stdout, "{i}\t{percent}\t{chars}")?;
