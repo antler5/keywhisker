@@ -1,3 +1,4 @@
+use crate::GenerationStrategy;
 use anyhow::{Context, Result};
 use keycat::{
     analysis::{Analyzer, MetricData as KcMetricData, NstrokeData, NstrokeIndex},
@@ -7,7 +8,7 @@ use keycat::{
 use keymeow::{LayoutData, MetricContext, MetricData};
 use linya::Progress;
 use rand::prelude::*;
-use std::{fs::File, io::Write, iter, path::Path};
+use std::{fs::File, io::Write, iter};
 use std::{fs::OpenOptions, io::LineWriter, sync::Mutex};
 
 pub fn kc_metric_data(metric_data: keymeow::MetricData, position_count: usize) -> KcMetricData {
@@ -57,8 +58,9 @@ fn layout_from_charset(corpus: &Corpus, metric_data: &MetricData, char_set: &str
                     .keys
                     .map
                     .iter()
-                    .map(|v| v.len())
-                    .sum::<usize>()
+                    .flatten()
+                    .count()
+                    + metric_data.keyboard.combos.len()
                     - core_matrix.len(),
             ),
         )
@@ -162,12 +164,12 @@ fn greedy_neighbor_optimization(
         for swap in possible_swaps {
             diff.iter_mut().for_each(|x| *x = 0.0);
             analyzer.swap_diff(&mut diff, &layout, swap);
-            if diff[*metric] > best_diff {
+            if diff[*metric] < best_diff {
                 best_swap = swap;
                 best_diff = diff[*metric];
             }
         }
-        if best_diff > 0.0 {
+        if best_diff < 0.0 {
             layout.swap(best_swap);
             i += 1;
         } else {
@@ -189,7 +191,7 @@ fn greedy_naive_optimization(
         possible_swaps,
         metric,
     }: &OptimizationContext,
-) -> (u32, f32) {
+) -> (u32, f32, Layout) {
     let mut rng = thread_rng();
     let mut layout = layout.clone();
     layout.matrix.shuffle(&mut rng);
@@ -198,20 +200,19 @@ fn greedy_naive_optimization(
 
     let mut swap_i = 0;
     for i in 0..5000 {
-	let swap = possible_swaps.choose(&mut rng).unwrap();
+        let swap = possible_swaps.choose(&mut rng).unwrap();
         diff.iter_mut().for_each(|x| *x = 0.0);
         analyzer.swap_diff(&mut diff, &layout, swap);
         if diff[*metric] < 0.0 {
-	    layout.swap(swap);
-	    swap_i = i;
+            layout.swap(swap);
+            swap_i = i;
         }
-        
     }
     let percent = totals.percentage(
         analyzer.calc_stats(&layout)[*metric].into(),
         analyzer.data.metrics[*metric],
     );
-    (swap_i, percent)
+    (swap_i, percent, layout)
 }
 
 fn simulated_annealing(
@@ -233,12 +234,12 @@ fn simulated_annealing(
     let iterations = 20_000;
     let dec: f32 = temp / iterations as f32;
     for _ in 0..iterations {
-	temp -= dec;
-	let swap = possible_swaps.choose(&mut rng).unwrap();
+        temp -= dec;
+        let swap = possible_swaps.choose(&mut rng).unwrap();
         diff.iter_mut().for_each(|x| *x = 0.0);
         analyzer.swap_diff(&mut diff, &layout, swap);
         if diff[*metric] < 0.0 || rng.gen::<f32>() < temp {
-	    layout.swap(swap);
+            layout.swap(swap);
         }
     }
     let percent = totals.percentage(
@@ -253,6 +254,8 @@ pub fn output_generation(
     metric_data: keymeow::MetricData,
     corpus: Corpus,
     char_set: &str,
+    strategy: &GenerationStrategy,
+    runs: u64,
 ) -> Result<()> {
     let metric: usize = get_metric(&metric, &metric_data).context("invalid metric")?;
     let layout = layout_from_charset(&corpus, &metric_data, &char_set);
@@ -270,15 +273,8 @@ pub fn output_generation(
         .filter(|Swap { a, b }| a != b)
         .collect();
 
-    let file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(false)
-        .append(true)
-        .open("data/e200_inroll_greedy_deterministic_runs.tsv").context("couldn't open data file")?;
-
-    let mut writer = LineWriter::new(file);
-    writeln!(writer, "iteration\tamount\tlayout")?;
+    let mut stdout = std::io::stdout().lock();
+    writeln!(stdout, "iteration\tamount\tlayout")?;
 
     let context = OptimizationContext {
         layout,
@@ -288,14 +284,23 @@ pub fn output_generation(
         metric,
     };
 
-    for n in 0..4_000 {
-        if n % 100 == 0 {
-            println!("{n}");
-        }
-        let (i, percent, result) = greedy_neighbor_optimization(&context);
-	let chars: String = result.matrix.iter().map(|c| context.analyzer.corpus.uncorpus_unigram(*c)).collect();
+    for _ in 0..runs {
+        let (i, percent, result) = match strategy {
+            GenerationStrategy::GreedyDeterministic => greedy_neighbor_optimization(&context),
+            GenerationStrategy::GreedyNaive => greedy_naive_optimization(&context),
+            GenerationStrategy::SimulatedAnnealing => simulated_annealing(&context),
+        };
+        let chars: String = result
+            .matrix
+            .iter()
+            .map(|c| context.analyzer.corpus.uncorpus_unigram(*c))
+            .map(|c| match c {
+		'\0' => ' ',
+		c => c
+	    })
+            .collect();
 
-        writeln!(writer, "{i}\t{percent}\t{chars}")?;
+        writeln!(stdout, "{i}\t{percent}\t{chars}")?;
     }
 
     // println!("{:?}", totals.percentage(analyzer.calc_stats(&layout)[metric].into(), analyzer.data.metrics[metric]));

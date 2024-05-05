@@ -3,7 +3,7 @@ mod files;
 
 use analysis::output_table;
 use anyhow::{Context, Result};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use directories::BaseDirs;
 use std::{collections::HashMap, fs, path::PathBuf};
 
@@ -43,14 +43,14 @@ impl Keywhisker {
 
 pub fn print_matrix(letters: &[char]) {
     for row in 0..3 {
-	for col in 0..5 {
-	    print!("{} ", letters[col*3 + row]);
-	}
-	print!(" ");
-	for col in 5..10 {
-	    print!("{} ", letters[col*3 + row]);
-	}
-	println!();
+        for col in 0..5 {
+            print!("{} ", letters[col * 3 + row]);
+        }
+        print!(" ");
+        for col in 5..10 {
+            print!("{} ", letters[col * 3 + row]);
+        }
+        println!();
     }
 }
 
@@ -80,6 +80,13 @@ impl AnalysisArgs {
     }
 }
 
+#[derive(ValueEnum, Debug, Clone)]
+enum GenerationStrategy {
+    GreedyDeterministic,
+    GreedyNaive,
+    SimulatedAnnealing,
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Display information about the environment (e.g. available layouts, corpora)
@@ -104,6 +111,11 @@ enum Commands {
         name: String,
     },
     RunGeneration {
+        /// The number of generation runs to perform
+        runs: u64,
+        /// The generation strategy to use
+        #[clap(value_enum)]
+        strategy: GenerationStrategy,
         /// The set of characters to use as keys in the layout
         char_set: String,
         /// The metric to reduce
@@ -112,8 +124,8 @@ enum Commands {
         analysis_args: AnalysisArgs,
     },
     FormatLayout {
-        chars: String
-    }
+        chars: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -159,16 +171,23 @@ fn main() -> Result<()> {
             println!("Length: {:?}", corpus.trigrams.len());
         }
         Some(Commands::RunGeneration {
+            runs,
+            strategy,
             char_set,
             metric,
             analysis_args,
         }) => {
             let (corpus, metric_data) = analysis_args.get(&keywhisker)?;
-            crate::analysis::output_generation(metric, metric_data, corpus, char_set)?;
+            crate::analysis::output_generation(
+                metric,
+                metric_data,
+                corpus,
+                char_set,
+                strategy,
+                *runs,
+            )?;
         }
-        Some(Commands::FormatLayout {
-            chars
-        }) => {
+        Some(Commands::FormatLayout { chars }) => {
             print_matrix(chars.chars().collect::<Vec<_>>().as_ref());
         }
         None => {}
