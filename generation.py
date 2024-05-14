@@ -12,10 +12,11 @@ files = [('data/greedy_naive_runs.csv', '100k Naive greedy runs (5k iterations e
 
 files = [('data/roll_greedy_deterministic_runs.tsv', 'Optimizing rolls with 10k deterministic greedy runs', 0),
          ('data/inroll_greedy_deterministic_runs.tsv', 'Optimizing inrolls with 10k deterministic greedy runs', 1),
-         ('data/e200_inroll_greedy_deterministic_runs.tsv', 'Optimizing inrolls with 1k deterministic greedy runs', 2)]
+         ('data/e200_inroll_greedy_deterministic_runs.tsv', 'Optimizing inrolls with 1k deterministic greedy runs', 2),
+         ('data/mr_taipo_gd_sfs.tsv', 'Optimizing taipo sfs with 5k deterministic greedy runs', 3)]
 
 sns.set()
-fig, axs = plt.subplots(3, tight_layout=True)
+fig, axs = plt.subplots(len(files), tight_layout=True)
 fig.suptitle('Resulting Roll values over massed generation runs with various algorithms')
 for file, title, index in files:
     ax = axs[index]

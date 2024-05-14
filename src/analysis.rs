@@ -287,7 +287,7 @@ pub fn output_generation(
             .iter()
             .map(|c| context.analyzer.corpus.uncorpus_unigram(*c))
             .map(|c| match c {
-                '\0' => ' ',
+                '\0' => '�',
                 c => c,
             })
             .collect();

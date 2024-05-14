@@ -5,6 +5,8 @@ use analysis::output_table;
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use directories::BaseDirs;
+use keycat::Corpus;
+use keymeow::LayoutData;
 use std::{collections::HashMap, fs, path::PathBuf};
 
 pub struct Keywhisker {
@@ -126,6 +128,12 @@ enum Commands {
     FormatLayout {
         chars: String,
     },
+    LayoutData {
+        chars: String,
+        keyboard: String,
+        #[arg(short, long)]
+        name: Option<String>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -189,6 +197,27 @@ fn main() -> Result<()> {
         }
         Some(Commands::FormatLayout { chars }) => {
             print_matrix(chars.chars().collect::<Vec<_>>().as_ref());
+        }
+        Some(Commands::LayoutData {
+            chars,
+            keyboard,
+            name,
+        }) => {
+            let corpus = Corpus::with_char_list(chars.chars().map(|c| vec![c]).collect());
+            let metrics = keywhisker.get_metrics(keyboard)?;
+            let layout = keycat::Layout {
+                matrix: chars
+                    .chars()
+                    .map(|c| corpus.corpus_char(c))
+                    .collect(),
+            };
+            let data = LayoutData::from_keyboard_layout(&metrics.keyboard, &layout, &corpus).name(
+                match name {
+                    Some(name) => name.to_owned(),
+                    None => "Custom".to_string(),
+                },
+            );
+            println!("{}", serde_json::to_string_pretty(&data)?);
         }
         None => {}
     };
