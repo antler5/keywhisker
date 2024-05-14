@@ -1,47 +1,11 @@
 mod analysis;
-mod files;
 
 use analysis::output_table;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use directories::BaseDirs;
 use keycat::Corpus;
 use keymeow::LayoutData;
-use std::{collections::HashMap, fs, path::PathBuf};
-
-pub struct Keywhisker {
-    pub corpora: HashMap<String, PathBuf>,
-    pub keyboards: HashMap<String, PathBuf>,
-    pub layouts: HashMap<String, PathBuf>,
-}
-
-impl Keywhisker {
-    fn new() -> Result<Self> {
-        let base_dirs = BaseDirs::new().context("couldn't determine base directories")?;
-        let data_dir = base_dirs.data_dir().join("keymeow");
-        Ok(Keywhisker {
-            corpora: files::dir_to_hashmap(&data_dir.join("corpora"))?,
-            keyboards: files::dir_to_hashmap(&data_dir.join("metrics"))?,
-            layouts: files::dir_to_hashmap(&data_dir.join("layouts"))?,
-        })
-    }
-    fn get_corpus(&self, s: &str) -> Result<keycat::Corpus> {
-        let path = self.corpora.get(s).context("couldn't find corpus")?;
-        let b = fs::read(path).with_context(|| format!("couldn't read corpus file {path:?}"))?;
-        rmp_serde::from_slice(&b).context("couldn't deserialize corpus")
-    }
-    fn get_metrics(&self, s: &str) -> Result<keymeow::MetricData> {
-        let path = self.keyboards.get(s).context("couldn't find keyboard")?;
-        let b = fs::read(path).with_context(|| format!("couldn't read metrics file {path:?}"))?;
-        rmp_serde::from_slice(&b).context("couldn't deserialize metrics")
-    }
-    fn get_layout(&self, s: &str) -> Result<keymeow::LayoutData> {
-        let path = self.layouts.get(s).context("couldn't find layout")?;
-        let b = fs::read_to_string(path)
-            .with_context(|| format!("couldn't read layout file {path:?}"))?;
-        serde_json::from_str(&b).context("couldn't deserialize layout")
-    }
-}
+use km_data::Data as KeymeowData;
 
 pub fn print_matrix(letters: &[char]) {
     for row in 0..3 {
@@ -74,10 +38,10 @@ pub struct AnalysisArgs {
 }
 
 impl AnalysisArgs {
-    pub fn get(&self, kw: &Keywhisker) -> Result<(keycat::Corpus, keymeow::MetricData)> {
+    pub fn get(&self, data: &KeymeowData) -> Result<(keycat::Corpus, keymeow::MetricData)> {
         Ok((
-            kw.get_corpus(&self.corpus)?,
-            kw.get_metrics(&self.keyboard)?,
+            data.get_corpus(&self.corpus)?,
+            data.get_metrics(&self.keyboard)?,
         ))
     }
 }
@@ -137,22 +101,22 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
-    let keywhisker = Keywhisker::new()?;
+    let keymeow = KeymeowData::with_download()?;
     let cli = Cli::parse();
 
     match &cli.command {
         Some(Commands::Env) => {
             println!(
                 "Corpora: {:?}",
-                keywhisker.corpora.keys().collect::<Vec<_>>()
+                keymeow.corpora.keys().collect::<Vec<_>>()
             );
             println!(
                 "Keyboards: {:?}",
-                keywhisker.keyboards.keys().collect::<Vec<_>>()
+                keymeow.keyboards.keys().collect::<Vec<_>>()
             );
             println!(
                 "Layouts: {:?}",
-                keywhisker.layouts.keys().collect::<Vec<_>>()
+                keymeow.layouts.keys().collect::<Vec<_>>()
             );
         }
         Some(Commands::Collect {
@@ -161,19 +125,19 @@ fn main() -> Result<()> {
             metrics,
             analysis_args,
         }) => {
-            let (corpus, metric_data) = analysis_args.get(&keywhisker)?;
+            let (corpus, metric_data) = analysis_args.get(&keymeow)?;
             output_table(metrics.to_owned(), metric_data, corpus, *count, char_set)?
         }
         Some(Commands::Stats {
             layout,
             analysis_args,
         }) => {
-            let (corpus, metric_data) = analysis_args.get(&keywhisker)?;
-            let layout = keywhisker.get_layout(layout)?;
+            let (corpus, metric_data) = analysis_args.get(&keymeow)?;
+            let layout = keymeow.get_layout(layout)?;
             analysis::stats(metric_data, corpus, layout)?;
         }
         Some(Commands::Corpus { name }) => {
-            let corpus = keywhisker.get_corpus(name)?;
+            let corpus = keymeow.get_corpus(name)?;
             println!("{:?}", corpus.trigrams);
             println!("Size: {:?} bytes", std::mem::size_of_val(&*corpus.trigrams));
             println!("Length: {:?}", corpus.trigrams.len());
@@ -185,7 +149,7 @@ fn main() -> Result<()> {
             metric,
             analysis_args,
         }) => {
-            let (corpus, metric_data) = analysis_args.get(&keywhisker)?;
+            let (corpus, metric_data) = analysis_args.get(&keymeow)?;
             crate::analysis::output_generation(
                 metric,
                 metric_data,
@@ -204,7 +168,7 @@ fn main() -> Result<()> {
             name,
         }) => {
             let corpus = Corpus::with_char_list(chars.chars().map(|c| vec![c]).collect());
-            let metrics = keywhisker.get_metrics(keyboard)?;
+            let metrics = keymeow.get_metrics(keyboard)?;
             let layout = keycat::Layout {
                 matrix: chars
                     .chars()
