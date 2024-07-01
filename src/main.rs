@@ -1,7 +1,9 @@
 mod analysis;
 
-use analysis::output_table;
-use anyhow::Result;
+use std::error::Error;
+
+use analysis::{combos, output_table};
+use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use keycat::Corpus;
 use keymeow::LayoutData;
@@ -69,7 +71,7 @@ enum Commands {
         analysis_args: AnalysisArgs,
     },
     Stats {
-        layout: String,
+        layouts: Vec<String>,
         #[command(flatten)]
         analysis_args: AnalysisArgs,
     },
@@ -85,7 +87,8 @@ enum Commands {
         /// The set of characters to use as keys in the layout
         char_set: String,
         /// The metric to reduce
-        metric: String,
+        #[arg(value_parser = parse_key_val::<String, u16>)]
+        metrics: Vec<(String, u16)>,
         #[command(flatten)]
         analysis_args: AnalysisArgs,
     },
@@ -97,7 +100,28 @@ enum Commands {
         keyboard: String,
         #[arg(short, long)]
         name: Option<String>,
+        #[arg(short, long)]
+        fixed: bool,
     },
+    Combos {
+        layout: String,
+        #[command(flatten)]
+        analysis_args: AnalysisArgs,
+    },
+}
+
+// from https://docs.rs/clap/latest/clap/_derive/_cookbook/typed_derive/index.html
+fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
+where
+    T: std::str::FromStr,
+    T::Err: Error + Send + Sync + 'static,
+    U: std::str::FromStr,
+    U::Err: Error + Send + Sync + 'static,
+{
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{s}`"))?;
+    Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
 }
 
 fn main() -> Result<()> {
@@ -106,18 +130,12 @@ fn main() -> Result<()> {
 
     match &cli.command {
         Some(Commands::Env) => {
-            println!(
-                "Corpora: {:?}",
-                keymeow.corpora.keys().collect::<Vec<_>>()
-            );
+            println!("Corpora: {:?}", keymeow.corpora.keys().collect::<Vec<_>>());
             println!(
                 "Keyboards: {:?}",
                 keymeow.keyboards.keys().collect::<Vec<_>>()
             );
-            println!(
-                "Layouts: {:?}",
-                keymeow.layouts.keys().collect::<Vec<_>>()
-            );
+            println!("Layouts: {:?}", keymeow.layouts.keys().collect::<Vec<_>>());
         }
         Some(Commands::Collect {
             count,
@@ -129,12 +147,15 @@ fn main() -> Result<()> {
             output_table(metrics.to_owned(), metric_data, corpus, *count, char_set)?
         }
         Some(Commands::Stats {
-            layout,
+            layouts,
             analysis_args,
         }) => {
             let (corpus, metric_data) = analysis_args.get(&keymeow)?;
-            let layout = keymeow.get_layout(layout)?;
-            analysis::stats(metric_data, corpus, layout)?;
+            let layouts: Result<Vec<_>> = layouts
+                .iter()
+                .map(|l| keymeow.get_layout(l).context("couldn't load layout"))
+                .collect();
+            analysis::stats(metric_data, corpus, layouts?)?;
         }
         Some(Commands::Corpus { name }) => {
             let corpus = keymeow.get_corpus(name)?;
@@ -146,12 +167,12 @@ fn main() -> Result<()> {
             runs,
             strategy,
             char_set,
-            metric,
+            metrics,
             analysis_args,
         }) => {
             let (corpus, metric_data) = analysis_args.get(&keymeow)?;
             crate::analysis::output_generation(
-                metric,
+                metrics,
                 metric_data,
                 corpus,
                 char_set,
