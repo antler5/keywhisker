@@ -300,18 +300,120 @@ pub fn output_generation(
     Ok(())
 }
 
-pub fn stats(metric_data: MetricData, corpus: Corpus, layout: LayoutData) -> Result<()> {
-    let ctx = MetricContext::new(&layout, metric_data, corpus)
-        .context("could not produce metric context")?;
+pub fn stats(metric_data: MetricData, corpus: Corpus, layouts: Vec<LayoutData>) -> Result<()> {
+    let ctx = MetricContext::new(
+        layouts
+            .first()
+            .context("need at least one layout to show stats for")?,
+        metric_data,
+        corpus,
+    )
+    .context("could not produce metric context")?;
     let totals = ctx.layout.totals(&ctx.analyzer.corpus);
 
-    let stats = ctx.analyzer.calc_stats(&ctx.layout);
-    for (i, stat) in stats.iter().enumerate() {
+    let stat_lists: Vec<Vec<f32>> = layouts
+        .iter()
+        .map(|l| {
+            let matrix = MetricContext::layout_matrix(l, &ctx.keyboard, &ctx.analyzer.corpus)
+                .with_context(|| format!("layout {} incompatible with keyboard", l.name))
+                .unwrap();
+            ctx.analyzer.calc_stats(&matrix)
+        })
+        .collect();
+    let max: usize = ctx.metrics.iter().map(|m| m.name.len()).max().unwrap();
+    let name_lengths: Vec<usize> = layouts.iter().map(|l| l.name.len()).collect();
+
+    let labels = layouts
+        .iter()
+        .fold(str::repeat(" ", max + 1), |mut output, l| {
+            let _ = write!(
+                output,
+                "{}{}",
+                l.name,
+                str::repeat(" ", 4 + 7_usize.saturating_sub(l.name.len()))
+            );
+            output
+        });
+
+    println!("{labels}");
+
+    for i in 0..ctx.metrics.len() {
+        let name = &ctx.metrics[i].name;
+        let percentages: String =
+            stat_lists
+                .iter()
+                .enumerate()
+                .fold(String::new(), |mut output, (col, s)| {
+                    let pc = totals.percentage(s[i], ctx.metrics[i].ngram_type);
+                    let len = match pc {
+                        x if x < 10. => 5,
+                        x if x < 100. => 6,
+                        _ => 7,
+                    };
+                    let name_spacing = 4 + 7_usize.saturating_sub(name_lengths[col]);
+                    let _ = write!(
+                        output,
+                        "{:.2}%{}",
+                        pc,
+                        str::repeat(" ", name_lengths[col] + name_spacing - len)
+                    );
+                    output
+                });
         println!(
-            "{}: {:.2}%",
-            ctx.metrics[i].name,
-            totals.percentage(*stat, ctx.metrics[i].ngram_type)
-        );
+            "{}{}{}",
+            name,
+            str::repeat(" ", 1 + max - name.len()),
+            percentages
+        )
     }
+
+    Ok(())
+}
+
+pub fn combos(metric_data: MetricData, corpus: Corpus, layout: LayoutData) -> Result<()> {
+    let mut ctx = MetricContext::new(&layout, metric_data, corpus)
+        .context("could not produce metric context")?;
+    let totals = ctx.layout.totals(&ctx.analyzer.corpus);
+    // let stats = ctx.analyzer.calc_stats(&ctx.layout);
+
+    let kb_size = ctx.keyboard.keys.map.iter().flatten().count();
+    ctx.keyboard.process_combo_indexes();
+
+    let mut i = 0;
+    for (idx, combo) in ctx.keyboard.combo_indexes.iter().enumerate() {
+        let combo_text: String = combo
+            .iter()
+            .take(3)
+            .filter_map(|i| {
+                let cc = ctx.layout.0[*i];
+                if cc == 0 {
+                    return None;
+                }
+                let c = ctx.analyzer.corpus.uncorpus_unigram(cc);
+                match c {
+                    ' ' => Some('␣'),
+                    _ => Some(c),
+                }
+            })
+            .collect();
+        let key = ctx.layout.0[kb_size + idx];
+        let output = match key {
+            0 => ' ',
+            _ => ctx.analyzer.corpus.uncorpus_unigram(key),
+        };
+        let spacing = str::repeat(" ", 4 - combo.len());
+        let freq = totals.percentage(ctx.analyzer.corpus.chars[key] as f32, NgramType::Bigram);
+        let freq_text = match output {
+            ' ' => String::from("      "),
+            _ => format!("({:.1}%)", freq),
+        };
+        print!("{combo_text}{spacing}{output} {freq_text}\t");
+        i += 1;
+        if i % 4 == 0 {
+            println!();
+        }
+    }
+    println!();
+
     Ok(())
 }

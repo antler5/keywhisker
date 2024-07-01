@@ -166,22 +166,37 @@ fn main() -> Result<()> {
             chars,
             keyboard,
             name,
+            fixed,
         }) => {
             let corpus = Corpus::with_char_list(chars.chars().map(|c| vec![c]).collect());
             let metrics = keymeow.get_metrics(keyboard)?;
-            let layout = keycat::Layout {
-                matrix: chars
+            let layout = keycat::Layout(
+                chars
                     .chars()
-                    .map(|c| corpus.corpus_char(c))
+                    .map(|c| match c {
+                        '�' => 0,
+                        _ => corpus.corpus_char(c),
+                    })
                     .collect(),
-            };
-            let data = LayoutData::from_keyboard_layout(&metrics.keyboard, &layout, &corpus).name(
-                match name {
-                    Some(name) => name.to_owned(),
-                    None => "Custom".to_string(),
-                },
             );
+            let data = if *fixed {
+                LayoutData::fixed_from_layout(&layout, &corpus)
+            } else {
+                LayoutData::flexible_from_keyboard_layout(&metrics.keyboard, &layout, &corpus)
+            }
+            .name(match name {
+                Some(name) => name.to_owned(),
+                None => "Custom".to_string(),
+            });
             println!("{}", serde_json::to_string_pretty(&data)?);
+        }
+        Some(Commands::Combos {
+            layout,
+            analysis_args,
+        }) => {
+            let (corpus, metric_data) = analysis_args.get(&keymeow)?;
+            let layout = keymeow.get_layout(layout)?;
+            combos(metric_data, corpus, layout)?;
         }
         None => {}
     };
