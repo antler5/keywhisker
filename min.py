@@ -8,10 +8,13 @@ file = sys.argv[1]
 data = pd.read_csv(file, sep='\t')
 minimum = data.score.argmin()
 row = data.loc[minimum]
-print(minimum)
 print(row)
-print(row.layout)
+print(f"mean score: {data.score.mean():.2f}")
+print(f"median score: {data.score.median():.2f}")
+print(f"best out of {len(data)} searched")
 
+if len(sys.argv) <= 2:
+    sys.exit(0)
 save = input("save this layout? (y/N): ") 
 if save != 'y':
     sys.exit(0)
