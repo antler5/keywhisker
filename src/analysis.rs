@@ -2,13 +2,13 @@ use crate::GenerationStrategy;
 use anyhow::{Context, Result};
 use keycat::{
     analysis::{Analyzer, MetricData as KcMetricData, NstrokeData, NstrokeIndex},
-    layout::LayoutTotals,
     Corpus, CorpusChar, Layout, NgramType, Swap,
 };
 use keymeow::{LayoutData, MetricContext, MetricData};
 use linya::Progress;
 use rand::prelude::*;
 use std::fmt::Write as StringWrite;
+use std::path::Path;
 use std::{fs::File, io::Write, iter};
 use std::{fs::OpenOptions, io::LineWriter, sync::Mutex};
 
@@ -171,6 +171,7 @@ fn greedy_neighbor_optimization(
         let mut best_diff = 0.0;
         let mut best_swap = &possible_swaps[0];
         for swap in possible_swaps {
+            evaluator.metrics.iter().for_each(|(index, _)| diff[*index] = 0.0);
             diff.iter_mut().for_each(|x| *x = 0.0);
             analyzer.swap_diff(&mut diff, &layout, swap);
             let score = evaluator.eval(&diff);
@@ -179,7 +180,7 @@ fn greedy_neighbor_optimization(
                 best_diff = score;
             }
         }
-        if best_diff < 0.0 {
+        if best_diff+0.000001 < 0.0 {
             layout.swap(best_swap);
             i += 1;
         } else {
@@ -260,6 +261,7 @@ pub fn output_generation(
     char_set: &str,
     strategy: &GenerationStrategy,
     runs: u64,
+    use_stdout: bool,
 ) -> Result<()> {
     let metric_weights: Result<Vec<_>> = metrics
         .iter()
@@ -290,7 +292,20 @@ pub fn output_generation(
         .filter(|Swap { a, b }| a != b)
         .collect();
 
-    let mut stdout = std::io::stdout().lock();
+    let output: &mut dyn Write = if use_stdout {
+        &mut std::io::stdout().lock()
+    } else {
+        let name: String = [format!("generate_{:?}", &strategy)]
+            .into_iter()
+            .chain(
+                metrics
+                    .iter()
+                    .map(|(metric, multiplier)| format!("_{multiplier}{metric}")),
+            )
+            .chain([".tsv".to_string()])
+            .collect();
+        &mut File::create(Path::new("generations").join(&name))?
+    };
     let mut s: String = "iteration\tscore\t".into();
     metrics.iter().for_each(|(m, _)| {
         s.push_str(m);
@@ -298,7 +313,7 @@ pub fn output_generation(
     });
     s.push_str("layout");
 
-    writeln!(stdout, "{}", s)?;
+    writeln!(output, "{}", s)?;
 
     let context = OptimizationContext {
         layout,
@@ -332,7 +347,7 @@ pub fn output_generation(
             ))
         }
 
-        writeln!(stdout, "{i}\t{score}\t{values}{chars}")?;
+        writeln!(output, "{i}\t{score}\t{values}{chars}")?;
     }
 
     // println!("{:?}", totals.percentage(analyzer.calc_stats(&layout)[metric].into(), analyzer.data.metrics[metric]));

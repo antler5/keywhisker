@@ -89,6 +89,9 @@ enum Commands {
         /// The metric to reduce
         #[arg(value_parser = parse_key_val::<String, u16>)]
         metrics: Vec<(String, u16)>,
+        /// If true, outputs tsv to stdout
+        #[arg(short, long)]
+        stdout: bool,
         #[command(flatten)]
         analysis_args: AnalysisArgs,
     },
@@ -168,6 +171,7 @@ fn main() -> Result<()> {
             strategy,
             char_set,
             metrics,
+            stdout,
             analysis_args,
         }) => {
             let (corpus, metric_data) = analysis_args.get(&keymeow)?;
@@ -178,6 +182,7 @@ fn main() -> Result<()> {
                 char_set,
                 strategy,
                 *runs,
+                *stdout,
             )?;
         }
         Some(Commands::FormatLayout { chars }) => {
