@@ -295,7 +295,8 @@ pub fn output_generation(
     let output: &mut dyn Write = if use_stdout {
         &mut std::io::stdout().lock()
     } else {
-        let name: String = [format!("generate_{:?}", &strategy)]
+        let random_number: u8 = rand::thread_rng().gen();
+        let name: String = [format!("generate_{:?}_{}", &strategy, random_number)]
             .into_iter()
             .chain(
                 metrics
@@ -304,7 +305,7 @@ pub fn output_generation(
             )
             .chain([".tsv".to_string()])
             .collect();
-        &mut File::create(Path::new("generations").join(&name))?
+        &mut File::create_new(Path::new("generations").join(&name))?
     };
     let mut s: String = "iteration\tscore\t".into();
     metrics.iter().for_each(|(m, _)| {
