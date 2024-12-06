@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-keycat = { git = "https://github.com/semilin/keycat", features = ["serde"] }
-keymeow = { git = "https://github.com/semilin/keymeow" }
-km_data = { git = "https://github.com/semilin/km_data", features = ["download"] }
+keycat = { git = "https://github.com/antler5/keycat", features = ["serde"] }
+keymeow = { git = "https://github.com/antler5/keymeow" }
+km_data = { git = "https://github.com/antler5/km_data", features = ["download"] }
 rmp-serde = "1.1.2"
 clap = { version = "4.5.4", features = ["derive"] }
 anyhow = "1.0.81"
