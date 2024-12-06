@@ -137,8 +137,8 @@ struct Evaluator {
     metrics: Vec<(usize, f32)>,
 }
 
-impl From<Vec<(usize, u16)>> for Evaluator {
-    fn from(metrics: Vec<(usize, u16)>) -> Self {
+impl From<Vec<(usize, i16)>> for Evaluator {
+    fn from(metrics: Vec<(usize, i16)>) -> Self {
         let sum: f32 = metrics.iter().map(|(_, x)| *x as f32).sum();
         Self {
             metrics: metrics.iter().map(|(m, x)| (*m, *x as f32 / sum)).collect(),
@@ -255,7 +255,7 @@ fn simulated_annealing(
 }
 
 pub fn output_generation(
-    metrics: &[(String, u16)],
+    metrics: &[(String, i16)],
     metric_data: keymeow::MetricData,
     corpus: Corpus,
     char_set: &str,

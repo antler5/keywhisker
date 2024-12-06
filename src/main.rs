@@ -87,8 +87,8 @@ enum Commands {
         /// The set of characters to use as keys in the layout
         char_set: String,
         /// The metric to reduce
-        #[arg(value_parser = parse_key_val::<String, u16>)]
-        metrics: Vec<(String, u16)>,
+        #[arg(value_parser = parse_key_val::<String, i16>)]
+        metrics: Vec<(String, i16)>,
         /// If true, outputs tsv to stdout
         #[arg(short, long)]
         stdout: bool,
