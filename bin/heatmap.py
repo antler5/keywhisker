@@ -18,12 +18,13 @@ X and Y should specify the labels of two numerical columns.
 Usage:
   heatmap.py [options] FILE
 
-  -x X      X axis column label. [default: m3roll]
-  -y Y      Y axis column label. [default: sfb]
-  -t TITLE  Graph title. [default: 2x4 w/ Thumb]
-  -o OUT    Output file. [default: img.svg]
-  -H        Use hexbins instead of hist2d.
-  -S        Color by mean score instead of density.
+  -x X         X axis column label. [default: m3roll]
+  -y Y         Y axis column label. [default: sfb]
+  -t TITLE     Graph title. [default: 2x4 w/ Thumb]
+  -o OUT       Output file. [default: img.svg]
+  -H           Use hexbins instead of hist2d.
+  -S           Color by mean score instead of density.
+  --hide-best  Don't label "best" layout.
 """
 
 # === Imports ===
@@ -56,14 +57,21 @@ def row(m3roll: float, sfb: float, sfs: float) -> dict:
   }
 
 known_layouts: dict = {
-  # 'ardux':         row(1.32, 92.26, 90.93),
-  'ardux-no-spc':  row(2.92, 54.56, 58.45),
-  # 'artsey':        row(1.38, 90.90, 90.19),
-  'artsey-no-spc': row(3.02, 53.16, 58.23),
-  'caret':         row(5.72, 52.58, 50.16),
-  'caret-no-spc':  row(9.92, 34.25, 50.20),
-  'taipo':         row(9.69, 31.11, 33.85),
-  'taipo-no-spc':  row(4.31, 49.18, 51.38)
+  # 'ardux':            row(1.32, 92.26, 90.93),
+  'ardux-no-spc':     row(2.92, 54.56, 58.45),
+  # 'artsey':           row(1.38, 90.90, 90.19),
+  'artsey-no-spc':    row(3.02, 53.16, 58.23),
+  'caret':            row(5.72, 52.58, 50.16),
+  'caret-no-spc':     row(9.92, 34.25, 50.20),
+  'taipo':            row(9.69, 31.11, 33.85),
+  'taipo-no-spc':     row(4.31, 49.18, 51.38),
+  '1-taurine':          row(14.41, 28, 38.73),
+  '2': row(18.03, 27.88, 42.89),
+  '3': row(12.96, 28.09, 36.39),
+  '4': row(9.98, 28.54, 37.18),
+  '5': row(15.015007, 30.14812, 37.49303),
+  '6': row(15.273136,32.06765,36.43247),
+  '7': row(12.924261,24.590355,43.340397)
 }
 
 # === Helpers ===
@@ -76,7 +84,8 @@ def load_data(args: dict) -> pd.DataFrame:
   data = pd.read_csv(args['FILE'], sep='\t')
 
   # Concat known layouts into data, setting any missing columns to NaN.
-  known_layouts['interesting'] = data.loc[data['score'].idxmin()]
+  if not args['--hide-best']:
+    known_layouts['0-best'] = data.loc[data['score'].idxmin()]
   df = pd.DataFrame(known_layouts.values())
   for col in data.columns.difference(df.columns):
     df[col] = np.nan
@@ -99,7 +108,7 @@ def set_axes_labels(args: dict, ax: matplotlib.axes._axes.Axes, dim: int) -> Non
 def label_known_layouts(args: dict, ax: matplotlib.axes._axes.Axes, dim: int) -> None:
   "Label known layouts on Axes AX."
   for layout, metrics in known_layouts.items():
-    color = 'red' if layout == 'interesting' else 'orange'
+    color = 'red' if layout[0].isdigit() else 'orange'
     pos: list[float] = []
 
     for i in range(0,dim):
