@@ -88,7 +88,7 @@ def set_axes_labels(args: dict, ax: matplotlib.axes._axes.Axes, dim: int) -> Non
     dim_letter = ['x','y','z'][i]
 
     set_label = getattr(ax, 'set_' + dim_letter + 'label')
-    set_label(maybe_upper(args['-x']))
+    set_label(maybe_upper(args['-' + dim_letter]))
 
     set_major_formatter = getattr(ax, dim_letter + 'axis').set_major_formatter
     set_major_formatter(PercentFormatter(decimals=0))
