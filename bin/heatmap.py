@@ -79,7 +79,7 @@ def load_data(args: dict) -> pd.DataFrame:
   known_layouts['interesting'] = data.loc[data['score'].idxmin()]
   df = pd.DataFrame(known_layouts.values())
   for col in data.columns.difference(df.columns):
-    df[col] = pd.NA
+    df[col] = np.nan
   data = pd.concat([data, df], ignore_index=True)
 
   return data
