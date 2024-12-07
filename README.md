@@ -11,6 +11,20 @@ https://github.com/semilin/keywhisker
 ```
 2024-12-06  antlers  <antlers@illucid.net>
 
+	Re-factor heatmap.py again
+	These functions might be useful later ;p
+
+	* bin/heatmap.py: Change default output type to SVG.
+	* bin/heatmap.py: Remove range variable, comfortable with the default now.
+	* bin/heatmap.py: Fix misc typing errors.
+	* bin/heatmap.py(load_data): Use `pd.concat` to merge known layouts into data.
+	* bin/heatmap.py(set_axis_labels): Pull axis configuration into
+	dimension-independent function.
+	* bin/heatmap.py(label_known_layouts): Pull layout labeling into
+	dimension-independent function.
+	* bin/heatmap.py: Refactor `-H` switch conditionals.
+	* README.md: Highlight changes.
+
 	heatmap.py: Make the graph even prettier
 	* bin/heatmap.py: Add `-H` flag for hexbins.
 	* bin/heatmap.py: Upcase metric labels w/o numbers in them.
