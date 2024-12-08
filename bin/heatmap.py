@@ -10,7 +10,7 @@
 # ]
 # ///
 
-"""Create a heapmap of rows from FILE on an X by Y grid.
+"""Create a heatmap of rows from FILE on an X by Y grid.
 
 FILE should be a TSV.
 X and Y should specify the labels of two numerical columns.
@@ -30,7 +30,7 @@ Usage:
 # === Imports ===
 import sys
 
-from typing import Any
+from typing import Any, Literal
 
 from docopt import docopt
 
@@ -49,7 +49,7 @@ from matplotlib.lines import Line2D
 def row(m3roll: float, sfb: float, sfs: float) -> dict:
   return {
     'iteration': 0,
-    'score': sys.maxsize,
+    'score': 1425000000, # a modest avg
     'm3roll': m3roll,
     'sfb': sfb,
     'sfs': sfs,
@@ -65,7 +65,7 @@ known_layouts: dict = {
   'caret-no-spc':     row(9.92, 34.25, 50.20),
   'taipo':            row(9.69, 31.11, 33.85),
   'taipo-no-spc':     row(4.31, 49.18, 51.38),
-  '1-taurine':          row(14.41, 28, 38.73),
+  '1-taurine':        row(14.41, 28, 38.73),
   '2': row(18.03, 27.88, 42.89),
   '3': row(12.96, 28.09, 36.39),
   '4': row(9.98, 28.54, 37.18),
@@ -123,15 +123,15 @@ def label_known_layouts(args: dict, ax: matplotlib.axes._axes.Axes, dim: int) ->
       edgecolor='#555'
     )
 
-    ax.annotate(
-      layout,
-      (pos[0]+0.35, *pos[1:]), # type: ignore[arg-type]
+    ax.text( # type: ignore[call-arg]
+      *(pos[0]+0.35, *pos[1:]), layout, # type: ignore[arg-type]
       va='center', color='black', fontsize=8,
       bbox=dict(facecolor='#D9D9D9', edgecolor='#555', boxstyle='round')
     )
 
 def make_hist(args: dict, ax: matplotlib.axes._axes.Axes) -> Any:
   (x, y) = (data[args['-x']], data[args['-y']])
+  hist: Any
 
   if args['-S']:
     cmap = 'inferno_r'
@@ -141,7 +141,7 @@ def make_hist(args: dict, ax: matplotlib.axes._axes.Axes) -> Any:
       C = data['score']
       reduce_C_function = np.mean
     else:
-      bins = 'log'
+      bins: Literal['log'] = 'log'
       mincnt = 1
 
     hist = ax.hexbin(
@@ -151,7 +151,7 @@ def make_hist(args: dict, ax: matplotlib.axes._axes.Axes) -> Any:
       bins=bins if 'bins' in locals() else None,
       cmap=cmap if 'cmap' in locals() else None,
       mincnt=mincnt if 'mincnt' in locals() else None,
-      reduce_C_function=reduce_C_function if 'reduce_C_function' in locals() else None)
+      reduce_C_function=reduce_C_function if 'reduce_C_function' in locals() else None) # type: ignore[arg-type]
     return (hist, hist)
 
   else:
@@ -161,7 +161,7 @@ def make_hist(args: dict, ax: matplotlib.axes._axes.Axes) -> Any:
       x_bins, y_bins = (64, 64)
       x_edges = np.linspace(x.min(), x.max(), x_bins + 1)
       y_edges = np.linspace(y.min(), y.max(), y_bins + 1)
-      hist, xedges, yedges = np.histogram2d(x, y, bins=[x_edges, y_edges])
+      hist , xedges, yedges = np.histogram2d(x, y, bins=[x_edges, y_edges])
 
       # Calculate means
       bin_means = np.zeros_like(hist)
@@ -188,16 +188,12 @@ if __name__ == "__main__":
 
   fig, ax = plt.subplots(tight_layout=True)
   fig.patch.set_facecolor('#D9D9D9')
-  
-  # Clip score values to ignore high outliers (known layouts are assigned bogus scores)
-  score_threshold = np.percentile(data['score'], 99)
-  data['score'] = np.clip(data['score'], None, score_threshold)
 
   hist, mappable = make_hist(args, ax)
 
   set_axes_labels(args, ax, 2)
   label_known_layouts(args, ax, 2)
-  
+
   # Colorbar
   cbar = fig.colorbar(mappable=mappable, ax=ax) # type: ignore[arg-type,index]
 
@@ -206,7 +202,7 @@ if __name__ == "__main__":
     cbar.set_label("Mean score / cell\n(lower/brighter is better)")
   else:
     cbar.set_label("Generated layout density\n(per ~1/64²)")
-  
+
   # Export
   plt.title(args['-t'] + "\n" + f'({len(data):,} samples)')
   plt.savefig(args['-o'], dpi=180)
