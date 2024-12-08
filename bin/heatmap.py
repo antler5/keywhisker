@@ -66,9 +66,9 @@ known_layouts: dict = {
   # 'ardux':         row(1.32, 92.26, 90.93),
   'ardux-no-spc':  row(2.92, 54.56, 58.45),
   # 'artsey':        row(1.38, 90.90, 90.19),
-  # 'artsey-no-spc': row(3.02, 53.16, 58.23),
-  # 'caret':         row(5.72, 52.58, 50.16),
-  # 'caret-no-spc':  row(9.92, 34.25, 50.20),
+  'artsey-no-spc': row(3.02, 53.16, 58.23),
+  'caret':         row(5.72, 52.58, 50.16),
+  'caret-no-spc':  row(9.92, 34.25, 50.20),
   'taipo':         row(9.69, 31.11, 33.85),
   'taipo-no-spc':  row(4.31, 49.18, 51.38),
   '1-taurine':     row(14.41, 28, 38.73),
@@ -104,6 +104,7 @@ class HeatmapContext(ABC):
   def load_data(self) -> None:
     "Read file from args and add known layouts."
     data = pd.read_csv(self.file, sep='\t')
+    print(data)
 
     # Concat known layouts into data, setting any missing columns to NaN.
     if not self.hide_best:
