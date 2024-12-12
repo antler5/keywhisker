@@ -131,6 +131,7 @@ struct OptimizationContext {
     analyzer: Analyzer,
     possible_swaps: Vec<Swap>,
     evaluator: Evaluator,
+    pin: usize,
 }
 
 struct Evaluator {
@@ -158,11 +159,15 @@ fn greedy_neighbor_optimization(
         analyzer,
         possible_swaps,
         evaluator,
+        pin,
     }: &OptimizationContext,
 ) -> (u32, f32, Vec<f32>, Layout) {
     let mut rng = thread_rng();
     let mut layout = layout.clone();
-    layout.0.shuffle(&mut rng);
+
+    // Shuffle without moving pinned keys
+    layout.0[*pin..].shuffle(&mut rng);
+
     let stats = analyzer.calc_stats(&layout);
     let mut diff = vec![0.0; stats.len()];
 
@@ -198,11 +203,15 @@ fn greedy_naive_optimization(
         analyzer,
         possible_swaps,
         evaluator,
+        pin,
     }: &OptimizationContext,
 ) -> (u32, f32, Vec<f32>, Layout) {
     let mut rng = thread_rng();
     let mut layout = layout.clone();
-    layout.0.shuffle(&mut rng);
+
+    // Shuffle without moving pinned keys
+    layout.0[*pin..].shuffle(&mut rng);
+
     let stats = analyzer.calc_stats(&layout);
     let mut diff = vec![0.0; stats.len()];
 
@@ -228,11 +237,15 @@ fn simulated_annealing(
         analyzer,
         possible_swaps,
         evaluator,
+        pin,
     }: &OptimizationContext,
 ) -> (u32, f32, Vec<f32>, Layout) {
     let mut rng = thread_rng();
     let mut layout = layout.clone();
-    layout.0.shuffle(&mut rng);
+
+    // Shuffle without moving pinned keys
+    layout.0[*pin..].shuffle(&mut rng);
+
     let stats = analyzer.calc_stats(&layout);
     let mut diff = vec![0.0; stats.len()];
 
@@ -260,6 +273,7 @@ pub fn output_generation(
     corpus: Corpus,
     char_set: &str,
     strategy: &GenerationStrategy,
+    pin: usize,
     runs: u64,
     use_stdout: bool,
 ) -> Result<()> {
@@ -287,9 +301,10 @@ pub fn output_generation(
     );
     let analyzer = Analyzer::from(data, corpus);
 
+    // Swap without moving pinned keys
     let possible_swaps: Vec<Swap> = (0..layout.0.len())
         .flat_map(|a| (0..layout.0.len()).map(move |b| Swap::new(a, b)))
-        .filter(|Swap { a, b }| a != b)
+        .filter(|Swap { a, b }| a != b && *a > pin && *b > pin)
         .collect();
 
     let output: &mut dyn Write = if use_stdout {
@@ -321,6 +336,7 @@ pub fn output_generation(
         analyzer,
         possible_swaps,
         evaluator,
+        pin,
     };
 
     let totals = context.layout.totals(&context.analyzer.corpus);

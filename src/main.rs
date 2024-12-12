@@ -92,6 +92,9 @@ enum Commands {
         /// If true, outputs tsv to stdout
         #[arg(short, long)]
         stdout: bool,
+        /// Number of positions to pin
+        #[arg(short, long)]
+        pin: usize,
         #[command(flatten)]
         analysis_args: AnalysisArgs,
     },
@@ -173,6 +176,7 @@ fn main() -> Result<()> {
             metrics,
             stdout,
             analysis_args,
+            pin,
         }) => {
             let (corpus, metric_data) = analysis_args.get(&keymeow)?;
             crate::analysis::output_generation(
@@ -181,6 +185,7 @@ fn main() -> Result<()> {
                 corpus,
                 char_set,
                 strategy,
+                *pin,
                 *runs,
                 *stdout,
             )?;
