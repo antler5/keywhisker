@@ -7,6 +7,7 @@ use keycat::{
 use keymeow::{LayoutData, MetricContext, MetricData};
 use linya::Progress;
 use rand::prelude::*;
+use rand::distributions::{Alphanumeric, DistString};
 use std::fmt::Write as StringWrite;
 use std::path::Path;
 use std::{fs::File, io::Write, iter};
@@ -310,14 +311,9 @@ pub fn output_generation(
     let output: &mut dyn Write = if use_stdout {
         &mut std::io::stdout().lock()
     } else {
-        let random_number: u8 = rand::thread_rng().gen();
-        let name: String = [format!("generate_{:?}_{}", &strategy, random_number)]
+        let random_string = Alphanumeric.sample_string(&mut rand::thread_rng(), 8);
+        let name: String = [format!("generate_{:?}_{}", &strategy, random_string)]
             .into_iter()
-            .chain(
-                metrics
-                    .iter()
-                    .map(|(metric, multiplier)| format!("_{multiplier}{metric}")),
-            )
             .chain([".tsv".to_string()])
             .collect();
         &mut File::create_new(Path::new("generations").join(&name))?
