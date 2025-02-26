@@ -113,6 +113,7 @@ class Histogram3D(HeatmapContext):
       non_empty_bins = np.where(hist >= density_threshold)
       color_values = hist[non_empty_bins]
       norm = LogNorm()
+      cmap = self.cmap
 
     # Jitter positions of bins to avoid perfect alignment
     for d in self.dims:

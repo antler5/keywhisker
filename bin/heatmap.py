@@ -25,7 +25,7 @@ Usage:
 
   -x X               X axis column label. [default: m3roll]
   -y Y               Y axis column label. [default: sfb]
-  -t, --title TITLE  Graph title. [default: 2x4 w/ Thumb]
+  -t, --title TITLE  Graph title. [default: (2x) 2x4 w/ Thumb(s)]
   -o, --out OUT      Output file. [default: img.svg]
   -H, --hex          Use hexbins instead of hist2d.
   -S, --score        Color by mean score instead of density.
@@ -33,6 +33,7 @@ Usage:
 """
 
 # === Imports ===
+import json
 import sys
 
 from abc import ABC, abstractmethod
@@ -52,32 +53,10 @@ from matplotlib.lines import Line2D
 # === Variables ===
 
 # Known layouts
-def row(m3roll: float, sfb: float, sfs: float) -> dict:
-  return {
-    'iteration': 0,
-    'score': 1425000000, # a modest avg
-    'm3roll': m3roll,
-    'sfb': sfb,
-    'sfs': sfs,
-    'layout': None,
-  }
-
+# XXX: Should be a class field.
+# TODO: Load from TSV?
 known_layouts: dict = {
-  # 'ardux':         row(1.32, 92.26, 90.93),
-  'ardux-no-spc':  row(2.92, 54.56, 58.45),
-  # 'artsey':        row(1.38, 90.90, 90.19),
-  'artsey-no-spc': row(3.02, 53.16, 58.23),
-  'caret':         row(5.72, 52.58, 50.16),
-  'caret-no-spc':  row(9.92, 34.25, 50.20),
-  'taipo':         row(9.69, 31.11, 33.85),
-  'taipo-no-spc':  row(4.31, 49.18, 51.38),
-  '1-taurine':     row(14.41, 28, 38.73),
-  '2':             row(18.03, 27.88, 42.89),
-  '3':             row(12.96, 28.09, 36.39),
-  '4':             row(9.98, 28.54, 37.18),
-  '5':             row(15.015007, 30.14812, 37.49303),
-  '6':             row(15.273136,32.06765,36.43247),
-  '7':             row(12.924261,24.590355,43.340397)
+  # Omitted from VCS
 }
 
 # === Helpers ===
@@ -101,17 +80,23 @@ class HeatmapContext(ABC):
       setattr(self, d + 'label', label)
       setattr(self, d, data)
 
+    with open('bin/freya_cmap.json', 'r') as f:
+      self.cmap = matplotlib.colors.ListedColormap(json.load(f))
+
   def load_data(self) -> None:
     "Read file from args and add known layouts."
+
     data = pd.read_csv(self.file, sep='\t')
-    print(data)
 
     # Concat known layouts into data, setting any missing columns to NaN.
     if not self.hide_best:
-      known_layouts['0-best'] = data.loc[data['score'].idxmin()]
-    df = pd.DataFrame(known_layouts.values())
-    for col in data.columns.difference(df.columns):
-      df[col] = np.nan
+      known_layouts['\"\"best\"\"'] = data.loc[data['score'].idxmin()]
+    df = pd.DataFrame([x[:len(data.columns)] for x in known_layouts.values()], columns=data.columns)
+    df['score'] = data['score'].mean()
+    # for col in data.columns.difference(df.columns):
+    #   df[col] = np.nan
+
+    # TEMP: Disabled when known layouts are in the data
     data = pd.concat([data, df], ignore_index=True)
 
     self.data = data
@@ -123,28 +108,50 @@ class HeatmapContext(ABC):
       set_label(maybe_upper(getattr(self, d + 'label')))
 
       set_major_formatter = getattr(self.ax, d + 'axis').set_major_formatter
-      set_major_formatter(PercentFormatter(decimals=0))
+      set_major_formatter(PercentFormatter(decimals=1))
 
   def label_known_layouts(self) -> None:
     "Label known layouts on Axes AX."
+    tab20 = matplotlib.colormaps.get_cmap('tab20b')
     for layout, metrics in known_layouts.items():
-      color = 'red' if layout[0].isdigit() else 'orange'
-      pos: list[float] = []
+      if not self.data[self.data['layout'] == metrics[-1]].empty:
+      # if True:
+        color = 'red' if layout[0].isdigit() else 'orange'
+        pos: list[float] = []
 
-      for d in self.dims:
-        pos += [metrics[getattr(self, d + 'label')]]
+        for d in self.dims:
+          # pos += [metrics[getattr(self, d + 'label')]]
 
-      self.ax.scatter(
-        *pos, # type: ignore[arg-type,misc]
-        label=layout,
-        marker='o',
-        s=25, color=color,
-        edgecolor='#555')
+          # XXX: FutureWarning: Series.__getitem__ treating keys as positions is
+          # deprecated. In a future version, integer keys will always be treated
+          # as labels (consistent with DataFrame behavior). To access a value by
+          # position, use `ser.iloc[pos]`
+          # but i don't get how to fix that here rn...
+          pos += [ # forgive me
+            metrics[self.data.columns.tolist().index(getattr(self, d + 'label'))]
+            if self.data[self.data['layout'] == metrics[-1]].empty
+            else self.data[self.data['layout'] == metrics[-1]].iloc[0][self.data.columns.tolist().index(getattr(self, d + 'label'))]
+          ]
 
-      self.ax.text( # type: ignore[call-arg]
-        *(pos[0]+0.35, *pos[1:]), layout, # type: ignore[arg-type]
-        va='center', color='black', fontsize=8,
-        bbox=dict(facecolor='#D9D9D9', edgecolor='#555', boxstyle='round'))
+        # # XXX: Weird, if I comment this out the labels appear above all
+        # # previously scattered points (in 3D)... I guess that's just how
+        # # it works?
+        # self.ax.scatter(
+        #   *pos, # type: ignore[arg-type,misc]
+        #   label=layout,
+        #   marker='o',
+        #   s=25, color=color,
+        #   edgecolor='#555')
+
+        color_idx = (ord(layout[0]) - 65)
+        color_idx = color_idx * 4
+        if layout[1].isdigit():
+          color_idx = color_idx + (int(layout[1]) % 4)
+
+        self.ax.text( # type: ignore[call-arg]
+          *(pos[0], *pos[1:]), layout, # type: ignore[arg-type]
+          va='center', color='black', fontsize=6,
+          bbox=dict(facecolor='#D9D9D9', edgecolor=tab20(color_idx % 20), boxstyle='round', linewidth=2))
 
   @abstractmethod
   def plot(self) -> tuple:
@@ -159,18 +166,24 @@ class Histogram2D(HeatmapContext):
 
     if self.score:
       cmap = 'inferno_r'
+    else:
+      cmap = self.cmap
 
     if self.hex:
       if self.score:
         C = self.data['score']
-        reduce_C_function = np.mean
+        reduce_C_function = np.min
+        bins: Literal['log'] = 'log'
       else:
         bins: Literal['log'] = 'log'
         mincnt = 1
 
       hist = self.ax.hexbin(
         self.x, self.y,
-        gridsize=(50,30), linewidths=0,
+        # gridsize=(25,15), linewidths=0,
+        gridsize=(40,24), linewidths=0,
+        # gridsize=(45,24), linewidths=0,
+        # gridsize=(50,30), linewidths=0,
         C=C if 'C' in locals() else None,
         bins=bins if 'bins' in locals() else None,
         cmap=cmap if 'cmap' in locals() else None,
@@ -196,7 +209,7 @@ class Histogram2D(HeatmapContext):
             # Get indexes of points in bin
             mask = ((self.x >= xedges[i]) & (self.x < xedges[i + 1]) &
                     (self.y >= yedges[j]) & (self.y < yedges[j + 1]))
-            bin_means[i, j] = self.data.loc[mask, 'score'].mean() if mask.any() else np.nan
+            bin_means[i, j] = self.data.loc[mask, 'score'].min() if mask.any() else np.nan
 
         hist = plt.pcolormesh(x_edges, y_edges, bin_means.T, cmap=cmap)
         return (hist, hist)
