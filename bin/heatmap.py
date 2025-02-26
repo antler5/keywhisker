@@ -9,7 +9,7 @@
 #   "docopt",
 #   "numpy",
 #   "matplotlib",
-#   "pandas"
+#   "pandas==2.2.3"
 # ]
 # ///
 
