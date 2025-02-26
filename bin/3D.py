@@ -66,10 +66,10 @@ class Histogram3D(HeatmapContext):
   def __init__(self, args):
     super().__init__(args, 3)
     if self.score:
-      self.density_threshold_percentile=92
+      self.density_threshold_percentile=95
     else:
-      self.density_threshold_percentile=96
-    self.jitter_strength=0.25
+      self.density_threshold_percentile=90
+    self.jitter_strength=0.5
     self.args = args
 
   def bin_data(self, num_bins=40):
@@ -77,7 +77,6 @@ class Histogram3D(HeatmapContext):
     x_min, x_max = self.x.min(), self.x.max()
     y_min, y_max = self.y.min(), self.y.max()
     z_min, z_max = self.z.min(), self.z.max()
-    score_min, score_max = self.data['score'].min(), self.data['score'].max()
 
     x_bins = np.linspace(x_min, x_max, num_bins + 1)
     y_bins = np.linspace(y_min, y_max, num_bins + 1)
@@ -133,6 +132,11 @@ class Histogram3D(HeatmapContext):
     self.fig.set_facecolor('black')
     self.ax.grid(False)
 
+    # # XXX: Density only
+    # alpha_values = np.sign(color_values) * np.log(abs(color_values) * 2)
+    # alpha_values = (alpha_values - alpha_values.min()) / (alpha_values.max() - alpha_values.min())
+    # alpha_values = np.clip(alpha_values, 0.5, None)
+
     scatter = self.ax.scatter(
       x_centers[non_empty_bins[0]] + self.jitter_x,
       y_centers[non_empty_bins[1]] + self.jitter_y,
@@ -141,7 +145,7 @@ class Histogram3D(HeatmapContext):
       cmap=cmap if 'cmap' in locals() else None,
       norm=norm if 'norm' in locals() else None,
       alpha=0.8,
-      s=((color_values - np.mean(color_values)) / np.std(color_values)) + 2 * 5)
+      s=((color_values - np.mean(color_values)) / np.std(color_values)) + 2 * 6)
 
     self.label_known_layouts()
 
@@ -152,7 +156,7 @@ class Histogram3D(HeatmapContext):
 
     cbar.ax.invert_yaxis()
     if c.score:
-      cbar.set_label("Mean score / bin\n(brighter is better)")
+      cbar.set_label("Mean score\n(brighter is lower/better)")
     else:
       cbar.set_label("Generated layout density / bin")
 
