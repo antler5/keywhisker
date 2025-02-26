@@ -189,6 +189,31 @@ class Histogram2D(HeatmapContext):
         cmap=cmap if 'cmap' in locals() else None,
         mincnt=mincnt if 'mincnt' in locals() else None,
         reduce_C_function=reduce_C_function if 'reduce_C_function' in locals() else None) # type: ignore[arg-type]
+
+      # This is also one of those things that's probably just for me
+      if self.xlabel == 'sfb' and self.ylabel == "no_magic_sfb":
+        self.ax.axline((5.2,5.2*0.923), slope=1, color='white')
+      elif self.xlabel == 'sfs' and self.ylabel == "no_magic_sfs":
+        self.ax.axline((12,12*0.923), slope=1, color='white')
+      elif self.xlabel == 'one_handed_sfs' and self.ylabel == "no_magic_one_handed_sfs":
+        self.ax.axline((30,30*0.923), slope=1, color='white')
+      elif self.xlabel == 'rt-index' and self.ylabel == "lt-index":
+        self.ax.axline((5,5), slope=1, color='white')
+      elif self.xlabel == 'rb-index' and self.ylabel == "lb-index":
+        self.ax.axline((5,5), slope=1, color='white')
+      elif self.xlabel == 'rt-middle' and self.ylabel == "lt-middle":
+        self.ax.axline((5,5), slope=1, color='white')
+      elif self.xlabel == 'rb-middle' and self.ylabel == "lb-middle":
+        self.ax.axline((5,5), slope=1, color='white')
+      elif self.xlabel == 'rt-ring' and self.ylabel == "lt-ring":
+        self.ax.axline((5,5), slope=1, color='white')
+      elif self.xlabel == 'rb-ring' and self.ylabel == "lb-ring":
+        self.ax.axline((5,5), slope=1, color='white')
+      elif self.xlabel == 'rt-pinkie' and self.ylabel == "lt-pinkie":
+        self.ax.axline((5,5), slope=1, color='white')
+      elif self.xlabel == 'rb-pinkie' and self.ylabel == "lb-pinkie":
+        self.ax.axline((5,5), slope=1, color='white')
+
       return (hist, hist)
 
     else:
