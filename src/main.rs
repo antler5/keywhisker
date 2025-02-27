@@ -53,6 +53,7 @@ enum GenerationStrategy {
     GreedyDeterministic,
     GreedyNaive,
     SimulatedAnnealing,
+    DDAKOSimulatedAnnealing,
 }
 
 #[derive(Subcommand)]

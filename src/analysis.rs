@@ -1,4 +1,5 @@
 use crate::GenerationStrategy;
+mod ddako_simulated_annealing;
 use anyhow::{Context, Result};
 use keycat::{
     analysis::{Analyzer, MetricData as KcMetricData, NstrokeData, NstrokeIndex},
@@ -268,6 +269,29 @@ fn simulated_annealing(
     (iterations, score, stats, layout)
 }
 
+fn ddako_simulated_annealing(
+    OptimizationContext {
+        layout,
+        analyzer,
+        possible_swaps,
+        evaluator,
+        pin: _pin,
+    }: &OptimizationContext,
+) -> (u32, f32, Vec<f32>, Layout) {
+    let mut sa = ddako_simulated_annealing::SimulatedAnnealing::new(
+        possible_swaps,
+        layout,
+        analyzer,
+        evaluator,
+        0.9,
+        5.0,
+        1.0,
+        10.0,
+    );
+
+    sa.optimize(possible_swaps.len(), None)
+}
+
 pub fn output_generation(
     metrics: &[(String, i16)],
     metric_data: keymeow::MetricData,
@@ -342,6 +366,7 @@ pub fn output_generation(
             GenerationStrategy::GreedyDeterministic => greedy_neighbor_optimization(&context),
             GenerationStrategy::GreedyNaive => greedy_naive_optimization(&context),
             GenerationStrategy::SimulatedAnnealing => simulated_annealing(&context),
+            GenerationStrategy::DDAKOSimulatedAnnealing => ddako_simulated_annealing(&context),
         };
         let chars: String = result
             .0
