@@ -18,6 +18,7 @@ pub struct SimulatedAnnealing<'a> {
     cooling_interval: f32,
     cooling_interval_min: f32,
     cooling_interval_max: f32,
+    max_iterations: Option<u32>,
     fitness: f32,
     temp: Option<f32>,
     stopping_point: Option<usize>,
@@ -33,6 +34,7 @@ impl<'a> SimulatedAnnealing<'a> {
         cooling_interval: f32,
         cooling_interval_min: f32,
         cooling_interval_max: f32,
+        max_iterations: Option<u32>,
     ) -> Self {
         let stats = analyzer.calc_stats(layout);
         let initial_fitness = evaluator.eval(&stats);
@@ -49,6 +51,7 @@ impl<'a> SimulatedAnnealing<'a> {
             cooling_interval,
             cooling_interval_min,
             cooling_interval_max,
+            max_iterations,
             fitness: initial_fitness,
             temp: None,
             stopping_point: None,
@@ -121,7 +124,6 @@ impl<'a> SimulatedAnnealing<'a> {
     pub fn optimize(
         &mut self,
         layout_size: usize,
-        max_iterations: Option<u32>,
     ) -> (u32, f32, Vec<f32>, Layout) {
         let mut rng = rand::thread_rng();
 

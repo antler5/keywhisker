@@ -287,9 +287,10 @@ fn ddako_simulated_annealing(
         5.0,
         1.0,
         10.0,
+        None,
     );
 
-    sa.optimize(possible_swaps.len(), None)
+    sa.optimize(possible_swaps.len())
 }
 
 pub fn output_generation(
