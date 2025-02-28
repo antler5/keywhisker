@@ -14,6 +14,106 @@ use std::path::Path;
 use std::{fs::File, io::Write, iter};
 use std::{fs::OpenOptions, io::LineWriter, sync::Mutex};
 
+use std::time::Instant;
+use std::time::Duration;
+
+use indexmap::IndexMap;
+use ratatui::{
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction},
+    style::{Color, Modifier, Style},
+    text::Span,
+    widgets::{Block, Borders, Row, Table, TableState},
+    Terminal,
+};
+
+fn print_hashmap(
+    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+    mut table_state: &mut TableState,
+    map: &indexmap::IndexMap<&str, String>,
+) {
+    if atty::is(atty::Stream::Stdout) {
+        terminal.clear().unwrap();
+        terminal.draw(|f| {
+            let chunks = ratatui::layout::Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(100)].as_ref())
+                .split(f.area());
+
+            let table = Table::new(
+                map.iter().map(|(key, value)| {
+                    if *key == "Initial Temp Stats" {
+                        Row::new(vec![
+                            Span::styled(key.to_string(), Style::default().fg(Color::Gray)),
+                            Span::styled(value.to_string(), Style::default().fg(Color::White)),
+                        ])
+                    } else {
+                        Row::new(vec![
+                            Span::styled(key.to_string(), Style::default().fg(Color::Yellow)),
+                            Span::styled(value.to_string(), Style::default().fg(Color::White)),
+                        ])
+                    }
+                }),
+                &[
+                    Constraint::Percentage(30),
+                    Constraint::Percentage(70),
+                ]
+            )
+            .header(Row::new(vec![
+                Span::styled("Key", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled("Value", Style::default().add_modifier(Modifier::BOLD)),
+            ]))
+            .block(Block::default().borders(Borders::ALL).title("Keywhisker"));
+
+            if table_state.selected().is_none() {
+                table_state.select(Some(0));
+            }
+
+            f.render_stateful_widget(table, chunks[0], &mut table_state);
+        })
+        .unwrap();
+    }
+}
+
+fn create_rate_tracker<'a>(
+    mut terminal: &'a mut Terminal<CrosstermBackend<std::io::Stdout>>,
+    mut table_state: &'a mut TableState,
+) -> impl FnMut(&mut IndexMap<&str, String>) + use<'a> {
+    let mut last_print = Instant::now();
+    let mut last_call = Instant::now();
+    let mut calls = 0u64;
+    let mut min_interval = Duration::from_secs(u64::MAX);
+    let mut max_interval = Duration::from_secs(0);
+
+    move |rt_stats: &mut IndexMap<&str, String>| {
+        let now = Instant::now();
+        let interval = now.duration_since(last_call);
+        min_interval = min_interval.min(interval);
+        max_interval = max_interval.max(interval);
+        last_call = now;
+        calls += 1;
+
+        if now.duration_since(last_print) >= Duration::from_secs(3) {
+            let elapsed = now.duration_since(last_print);
+            let rate = calls as f64 / elapsed.as_secs_f64();
+            for (label, stat) in &mut *rt_stats {
+                match *label {
+                    "Evaluation Rate" => *stat = format!("{:.5} swaps/second", rate),
+                    "Min/Max Interval" => *stat = format!("{:?} \t/ {:?}", min_interval, max_interval),
+                    _ => (),
+                }
+            }
+            print_hashmap(&mut terminal, &mut table_state, &rt_stats);
+
+            // Reset stats
+            calls = 0;
+            last_print = now;
+            min_interval = Duration::from_secs(u64::MAX);
+            max_interval = Duration::from_secs(0);
+        }
+    }
+}
+
 pub fn kc_metric_data(metric_data: keymeow::MetricData, position_count: usize) -> KcMetricData {
     KcMetricData::from(
         metric_data.metrics.iter().map(|m| m.ngram_type).collect(),
@@ -278,6 +378,12 @@ fn ddako_simulated_annealing(
         pin: _pin,
     }: &OptimizationContext,
 ) -> (u32, f32, Vec<f32>, Layout) {
+    let backend = CrosstermBackend::new(std::io::stdout());
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    let mut table_state = TableState::default();
+    let mut rt = create_rate_tracker(&mut terminal, &mut table_state);
+
     let mut sa = ddako_simulated_annealing::SimulatedAnnealing::new(
         possible_swaps,
         layout,
@@ -288,6 +394,7 @@ fn ddako_simulated_annealing(
         1.0,
         10.0,
         None,
+        &mut rt,
     );
 
     sa.optimize(possible_swaps.len())

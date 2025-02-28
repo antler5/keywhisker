@@ -7,6 +7,8 @@ use crate::analysis::Evaluator;
 use keycat::analysis::Analyzer;
 use keycat::{Layout, Swap};
 
+use indexmap::IndexMap;
+
 pub struct SimulatedAnnealing<'a> {
     possible_swaps: Vec<Swap>,
     layout: Layout,
@@ -22,6 +24,8 @@ pub struct SimulatedAnnealing<'a> {
     fitness: f32,
     temp: Option<f32>,
     stopping_point: Option<usize>,
+    rate_tracker: &'a mut dyn FnMut(&mut IndexMap<&'a str, String>),
+    rt_stats: IndexMap<&'a str, String>,
 }
 
 impl<'a> SimulatedAnnealing<'a> {
@@ -35,10 +39,26 @@ impl<'a> SimulatedAnnealing<'a> {
         cooling_interval_min: f32,
         cooling_interval_max: f32,
         max_iterations: Option<u32>,
+        rate_tracker: &'a mut dyn FnMut(&mut IndexMap<&'a str, String>),
     ) -> Self {
         let stats = analyzer.calc_stats(layout);
         let initial_fitness = evaluator.eval(&stats);
         let len = stats.len();
+
+        let empty_str = String::from("");
+        let rt_stats: IndexMap<&str, String> = IndexMap::from([
+            ("Initial Temp Stats",  empty_str.clone()),
+            ("Evaluation Rate",     empty_str.clone()),
+            ("Min/Max Interval",    empty_str.clone()),
+            // -----
+            ("Iteration",           empty_str.clone()),
+            ("Stays",               empty_str.clone()),
+            ("Temp",                empty_str.clone()),
+            ("Cooling Interval",    empty_str.clone()),
+            ("Acceptance Rate",     empty_str.clone()),
+            ("Current",             empty_str.clone()),
+            ("Best",                empty_str.clone()),
+        ]);
 
         SimulatedAnnealing {
             possible_swaps: possible_swaps.to_vec(),
@@ -55,6 +75,8 @@ impl<'a> SimulatedAnnealing<'a> {
             fitness: initial_fitness,
             temp: None,
             stopping_point: None,
+            rate_tracker,
+            rt_stats,
         }
     }
 
@@ -98,18 +120,33 @@ impl<'a> SimulatedAnnealing<'a> {
                 if delta > 0.001 {
                     energies.push(new_fitness);
                 }
+
+                (self.rate_tracker)(&mut self.rt_stats);
             }
 
+            let sum_exp: f32 = energies.iter().map(|e| E.powf(-*e / tn)).sum();
+
+            acceptance_probability =
+                sum_exp / (energies.len() as f32 * E.powf(-self.fitness / tn));
+
             if !energies.is_empty() {
-                let sum_exp: f32 = energies.iter().map(|e| E.powf(-*e / tn)).sum();
-
-                acceptance_probability =
-                    sum_exp / (energies.len() as f32 * E.powf(-self.fitness / tn));
-
                 tn *= acceptance_probability.ln() / acceptance_ratio.ln();
             } else {
                 tn *= 2.0;
             }
+
+            for (label, stat) in &mut self.rt_stats {
+                match *label {
+                    "Initial Temp Stats" => *stat =
+                        format!("sum: {}, acc_prob: {}, tn: {}, test: {}",
+                                sum_exp,
+                                acceptance_probability,
+                                tn,
+                                (acceptance_probability - acceptance_ratio).abs()),
+                    _ => ()
+                };
+            };
+            (self.rate_tracker)(&mut self.rt_stats);
         }
 
         tn
@@ -147,13 +184,14 @@ impl<'a> SimulatedAnnealing<'a> {
         let mut last_improvement_iteration = 0;
 
         while stays < self.stopping_point.unwrap() {
-            if let Some(max_iter) = max_iterations {
+            if let Some(max_iter) = self.max_iterations {
                 if iteration >= max_iter {
                     break;
                 }
             }
 
             for _ in 0..layout_size {
+                (self.rate_tracker)(&mut self.rt_stats);
                 let new_swap = self.possible_swaps.choose(&mut rng).unwrap().clone();
                 let new_fitness = self.evaluate_swap_slowly(&new_swap);
                 let delta = new_fitness - self.fitness;
@@ -200,6 +238,39 @@ impl<'a> SimulatedAnnealing<'a> {
             }
 
             let time_since_improvement = iteration - last_improvement_iteration;
+
+            // Rate tracker
+            for (label, stat) in &mut self.rt_stats {
+                match *label {
+                    "Iteration"           => *stat = format!("{} ({} since improvement)", iteration, time_since_improvement),
+                    "Stays"               => *stat = format!("{}/{}", stays, self.stopping_point.unwrap()),
+                    "Temp"                => *stat = format!("{}", self.temp.unwrap()),
+                    "Cooling Interval"    => *stat = format!("{}", self.cooling_interval),
+                    "Acceptance Rate"     => *stat = format!("{}", acceptance_rate),
+                    "Current"             => *stat =
+                        format!("{}\t({})",
+                                self.fitness,
+                                String::from_iter(
+                                  self.layout.0.iter()
+                                      .map(|c| self.analyzer.corpus.uncorpus_unigram(*c))
+                                      .map(|c| match c {
+                                          '\0' => '�',
+                                          c => c,
+                                      }))),
+                    "Best" => *stat =
+                        format!("{}\t({})",
+                                best_fitness,
+                                String::from_iter(
+                                    best_layout.iter()
+                                        .map(|c| self.analyzer.corpus.uncorpus_unigram(*c))
+                                        .map(|c| match c {
+                                            '\0' => '�',
+                                            c => c,
+                                        }))),
+                    _ => {}
+                };
+            };
+            (self.rate_tracker)(&mut self.rt_stats);
 
             // Cooling & Interval adjustment
             if iteration > 0 && (iteration - last_adjustment) % self.cooling_interval as u32 == 0 {
