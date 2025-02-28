@@ -10,8 +10,10 @@ https://github.com/semilin/keywhisker
 
 Well, first I got really carried away with all this:
 
+![](./img/tui.png)
+
 | Density | Score |
 :-------------------------:|:-------------------------:
-![ugh](./img/density-sfb.svg) | ![](./img/score-sfb.svg)
-![ugh](./img/density-sfs.svg) | ![](./img/score-sfs.svg)
-![ugh](./img/density-opt.gif) | ![](./img/score-opt.gif)
+![](./img/density-sfb.svg) | ![](./img/score-sfb.svg)
+![](./img/density-sfs.svg) | ![](./img/score-sfs.svg)
+![](./img/density-opt.gif) | ![](./img/score-opt.gif)
