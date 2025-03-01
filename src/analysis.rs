@@ -1,5 +1,6 @@
 use crate::GenerationStrategy;
-mod ddako_simulated_annealing;
+use crate::ddako::simulated_annealing as ddako_sa;
+
 use anyhow::{Context, Result};
 use keycat::{
     analysis::{Analyzer, MetricData as KcMetricData, NstrokeData, NstrokeIndex},
@@ -236,7 +237,7 @@ struct OptimizationContext {
     pin: usize,
 }
 
-struct Evaluator {
+pub struct Evaluator {
     metrics: Vec<(usize, f32)>,
 }
 
@@ -384,7 +385,7 @@ fn ddako_simulated_annealing(
     let mut table_state = TableState::default();
     let mut rt = create_rate_tracker(&mut terminal, &mut table_state);
 
-    let mut sa = ddako_simulated_annealing::SimulatedAnnealing::new(
+    let mut sa = ddako_sa::SimulatedAnnealing::new(
         possible_swaps,
         layout,
         analyzer,
