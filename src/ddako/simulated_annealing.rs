@@ -255,35 +255,28 @@ impl<'a> SimulatedAnnealing<'a> {
             }
 
             let time_since_improvement = iteration - last_improvement_iteration;
+            let format_layout = |l: &Vec<usize>, f: f32| {
+                format!("{}\t({})",
+                        f,
+                        String::from_iter(
+                          l.iter()
+                              .map(|c| self.analyzer.corpus.uncorpus_unigram(*c))
+                              .map(|c| match c {
+                                  '\0' => '�',
+                                  c => c,
+                              })))
+            };
 
             // Rate tracker
             for (label, stat) in &mut self.rt_stats {
                 match *label {
-                    "Iteration"           => *stat = format!("{} ({} since improvement)", iteration, time_since_improvement),
-                    "Stays"               => *stat = format!("{}/{}", stays, self.stopping_point.unwrap()),
-                    "Temp"                => *stat = format!("{}", self.temp.unwrap()),
-                    "Cooling Interval"    => *stat = format!("{}", self.cooling_interval),
-                    "Acceptance Rate"     => *stat = format!("{}", acceptance_rate),
-                    "Current"             => *stat =
-                        format!("{}\t({})",
-                                self.fitness,
-                                String::from_iter(
-                                  self.layout.0.iter()
-                                      .map(|c| self.analyzer.corpus.uncorpus_unigram(*c))
-                                      .map(|c| match c {
-                                          '\0' => '�',
-                                          c => c,
-                                      }))),
-                    "Best" => *stat =
-                        format!("{}\t({})",
-                                best_fitness,
-                                String::from_iter(
-                                    best_layout.iter()
-                                        .map(|c| self.analyzer.corpus.uncorpus_unigram(*c))
-                                        .map(|c| match c {
-                                            '\0' => '�',
-                                            c => c,
-                                        }))),
+                    "Iteration"        => *stat = format!("{} ({} since improvement)", iteration, time_since_improvement),
+                    "Stays"            => *stat = format!("{}/{}", stays, self.stopping_point.unwrap()),
+                    "Temp"             => *stat = format!("{}", self.temp.unwrap()),
+                    "Cooling Interval" => *stat = format!("{}", self.cooling_interval),
+                    "Acceptance Rate"  => *stat = format!("{}", acceptance_rate),
+                    "Current"          => *stat = format_layout(&self.layout.0, self.fitness),
+                    "Best"             => *stat = format_layout(&best_layout, best_fitness),
                     _ => {}
                 };
             };
