@@ -170,7 +170,7 @@ impl<'a> SimulatedAnnealing<'a> {
     }
 
     fn get_stopping_point(&self, layout_size: usize) -> usize {
-        let possible_swaps = layout_size as f32;
+        let possible_swaps = (layout_size * (layout_size - 1)) as f32 / 2.0;
         let euler_mascheroni = 0.577_215_7;
         ((possible_swaps * (possible_swaps.ln() + euler_mascheroni) + 0.5).ceil()) as usize
     }
